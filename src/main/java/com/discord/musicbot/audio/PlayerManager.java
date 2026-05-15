@@ -161,28 +161,34 @@ public class PlayerManager {
         });
     }
 
-    private String getSpotifyAccessToken() {
+    /**
+     * Gets an anonymous Spotify access token from the embed page.
+     * No premium or API credentials needed — this is the same token
+     * Spotify's web embed player uses publicly.
+     */
+    private String getAnonymousSpotifyToken(String spotifyId, boolean isAlbum) {
         try {
-            io.github.cdimascio.dotenv.Dotenv dotenv = io.github.cdimascio.dotenv.Dotenv.load();
-            String clientId = dotenv.get("SPOTIFY_CLIENT_ID");
-            String clientSecret = dotenv.get("SPOTIFY_CLIENT_SECRET");
-            if (clientId == null || clientId.isEmpty() || clientSecret == null || clientSecret.isEmpty() || clientId.contains("your_")) return null;
-
-            String auth = java.util.Base64.getEncoder().encodeToString((clientId + ":" + clientSecret).getBytes());
+            String embedType = isAlbum ? "album" : "playlist";
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                    .uri(java.net.URI.create("https://accounts.spotify.com/api/token"))
-                    .header("Authorization", "Basic " + auth)
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString("grant_type=client_credentials"))
+                    .uri(java.net.URI.create("https://open.spotify.com/embed/" + embedType + "/" + spotifyId))
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+                    .GET()
                     .build();
+            java.net.http.HttpResponse<String> response = java.net.http.HttpClient.newBuilder()
+                    .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+                    .build()
+                    .send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
 
-            java.net.http.HttpResponse<String> response = java.net.http.HttpClient.newHttpClient().send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-            com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.body());
-            return root.path("access_token").asText(null);
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("\"accessToken\":\"([^\"]+)\"").matcher(response.body());
+            if (m.find()) {
+                logger.debug("Spotify: Got anonymous embed token");
+                return m.group(1);
+            }
         } catch (Exception e) {
-            logger.error("Failed to get Spotify access token", e);
-            return null;
+            logger.error("Failed to get anonymous Spotify token", e);
         }
+        return null;
     }
 
     private CompletableFuture<SpotifyPlaylistResult> fetchSpotifyPlaylist(String url) {
@@ -273,13 +279,13 @@ public class PlayerManager {
                     }
                 }
 
-                // If there are more tracks than what the scraper got, try Spotify API
+                // If there are more tracks than what the scraper got, try anonymous Spotify token
                 if (totalCount > tracks.size()) {
-                    String token = getSpotifyAccessToken();
+                    String id = url.split("\\?")[0].replaceAll(".*/(playlist|album)/", "");
+                    String token = getAnonymousSpotifyToken(id, isAlbum);
                     if (token != null) {
                         try {
                             List<SpotifyMetadata> apiTracks = new ArrayList<>();
-                            String id = url.split("\\?")[0].replaceAll(".*/(playlist|album)/", "");
                             String apiUrl = isAlbum
                                     ? "https://api.spotify.com/v1/albums/" + id + "/tracks?limit=50"
                                     : "https://api.spotify.com/v1/playlists/" + id + "/tracks?limit=100";
@@ -293,6 +299,12 @@ public class PlayerManager {
                                         .build();
                                 java.net.http.HttpResponse<String> apiResp = client
                                         .send(apiReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+                                
+                                if (apiResp.statusCode() != 200) {
+                                    logger.warn("Spotify API returned {}, using scraped tracks", apiResp.statusCode());
+                                    break;
+                                }
+                                
                                 com.fasterxml.jackson.databind.JsonNode apiRoot = mapper.readTree(apiResp.body());
 
                                 com.fasterxml.jackson.databind.JsonNode items = apiRoot.path("items");
@@ -325,14 +337,14 @@ public class PlayerManager {
                             }
 
                             if (!apiTracks.isEmpty()) {
-                                tracks = apiTracks; // Replace scraped with full API data
-                                logger.info("Spotify API: Extracted {} tracks from '{}'", tracks.size(), playlistName);
+                                tracks = apiTracks;
+                                logger.info("Spotify: Fetched full {} tracks via anonymous token from '{}'", tracks.size(), playlistName);
                             }
                         } catch (Exception e) {
                             logger.error("Spotify API pagination failed, using scraped tracks", e);
                         }
                     } else {
-                        logger.warn("Spotify: '{}' has {} tracks but only {} loaded. Set SPOTIFY_CLIENT_ID/SECRET in .env for full playlists.",
+                        logger.warn("Spotify: '{}' has {} tracks but only {} loaded (could not get anonymous token).",
                                 playlistName, totalCount, tracks.size());
                     }
                 }
