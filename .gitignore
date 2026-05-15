@@ -1,0 +1,69 @@
+# Compiled class file
+*.class
+bin/
+target/
+build/
+
+# Log files
+*.log
+
+# Package files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# JVM crash logs
+hs_err_pid*
+replay_pid*
+
+# Environment
+.env
+
+# Data and state files
+database.json
+sessions.json
+history.json
+initial-state.json
+spotify_state.json
+spotify_album_state.json
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gradle
+.gradle/
+build.gradle
+settings.gradle
+gradle/
+
+# Maven generated
+dependency-reduced-pom.xml
+maven-extracted/
+
+# Temporary and scratch files
+scratch*
+build_*.txt
+errors.txt
+head.txt
+*.bak
+*.bak.java
+*.html
+
+# Test stubs
+src/main/java/com/discord/musicbot/test/
+
+# Logs directory
+logs/

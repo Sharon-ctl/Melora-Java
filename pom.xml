@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.discord</groupId>
+    <artifactId>discord-music-bot</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>Discord Music Bot</name>
+    <description>Production-ready Discord music bot</description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <repositories>
+        <!-- JDA Repository -->
+        <repository>
+            <id>dv8tion</id>
+            <name>m2-dv8tion</name>
+            <url>https://m2.dv8tion.net/releases</url>
+        </repository>
+        <repository>
+            <id>arbjergdev-releases</id>
+            <url>https://maven.lavalink.dev/releases</url>
+        </repository>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+        <repository>
+            <id>topi-releases</id>
+            <url>https://maven.topi.wtf/releases</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!-- JDA - Discord API Wrapper -->
+        <dependency>
+            <groupId>net.dv8tion</groupId>
+            <artifactId>JDA</artifactId>
+            <version>6.4.1</version>
+        </dependency>
+
+        <!-- Lavaplayer - Arbjerg -->
+        <dependency>
+            <groupId>dev.arbjerg</groupId>
+            <artifactId>lavaplayer</artifactId>
+            <version>2.2.6</version>
+        </dependency>
+
+        <!-- Logging - SLF4J + Logback -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.4.14</version>
+        </dependency>
+
+        <!-- Environment Variables -->
+        <dependency>
+            <groupId>io.github.cdimascio</groupId>
+            <artifactId>dotenv-java</artifactId>
+            <version>3.0.0</version>
+        </dependency>
+
+        <!-- Jackson for JSON -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.16.1</version>
+        </dependency>
+
+
+
+        <!-- YouTube Source v2 -->
+        <dependency>
+            <groupId>dev.lavalink.youtube</groupId>
+            <artifactId>common</artifactId>
+            <version>1.18.1</version>
+        </dependency>
+
+
+        <!-- JDAVE for Discord DAVE E2EE Voice -->
+        <dependency>
+            <groupId>club.minnced</groupId>
+            <artifactId>jdave-api</artifactId>
+            <version>0.1.8</version>
+        </dependency>
+        <dependency>
+            <groupId>club.minnced</groupId>
+            <artifactId>jdave-native-win-x86-64</artifactId>
+            <version>0.1.8</version>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>25</source>
+                    <target>25</target>
+                </configuration>
+            </plugin>
+
+            <!-- Shade Plugin - Create executable JAR -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.discord.musicbot.BotLauncher</mainClass>
+                                </transformer>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
