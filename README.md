@@ -37,7 +37,22 @@ Melora-Java is a high-performance, robust Discord music bot built with Java, JDA
    ```bash
    mvn clean package -DskipTests
    ```
-   This will generate a shaded JAR file in the `target/` directory (e.g., `discord-music-bot-1.0.0-shaded.jar`).
+   This will generate a shaded JAR file in the `target/` directory (e.g., `melora.jar`).
+
+## VPS / Datacenter Deployment (YouTube 403 Fix)
+
+If you are hosting the bot on a VPS or cloud provider, YouTube will likely block the connection with a `This video requires login` error. To bypass this, configure a **PoToken**:
+
+1. Log into YouTube in an incognito window in your browser.
+2. Open Developer Tools (F12) -> Network tab.
+3. Play a video. Look for a request named `player?key=...` or `videoplayback?`.
+4. In the Request payload/headers, locate the `visitorData` and `poToken` strings. (Alternatively, use a community tool/extension like YouTube PoToken Generator).
+5. Open `.env` and add:
+   ```env
+   YOUTUBE_PO_TOKEN=your_po_token
+   YOUTUBE_VISITOR_DATA=your_visitor_data
+   ```
+The bot will automatically apply these credentials to bypass rate-limiting.
 
 ## Running the Bot
 

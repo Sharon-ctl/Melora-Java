@@ -43,6 +43,23 @@ public class PlayerManager {
 
         // --- Register YouTube Source (v2) ---
         YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(true);
+        
+        try {
+            io.github.cdimascio.dotenv.Dotenv dotenv = io.github.cdimascio.dotenv.Dotenv.load();
+            String poToken = dotenv.get("YOUTUBE_PO_TOKEN");
+            String visitorData = dotenv.get("YOUTUBE_VISITOR_DATA");
+            
+            if (poToken != null && !poToken.isEmpty() && visitorData != null && !visitorData.isEmpty()) {
+                // Use reflection to set PoToken and VisitorData to avoid version incompatibility crashes
+                Class<?> webClass = Class.forName("dev.lavalink.youtube.clients.Web");
+                java.lang.reflect.Method setTokenMethod = webClass.getMethod("setPoTokenAndVisitorData", String.class, String.class);
+                setTokenMethod.invoke(null, poToken, visitorData);
+                logger.info("YouTube PoToken and VisitorData configured successfully. This will bypass VPS 403 errors!");
+            }
+        } catch (Exception e) {
+            logger.warn("Could not configure YouTube PoToken (Ignore if you haven't set YOUTUBE_PO_TOKEN in .env). Error: {}", e.getMessage());
+        }
+
         playerManager.registerSourceManager(youtube);
         logger.info("YouTube source (v2) registered successfully");
 
