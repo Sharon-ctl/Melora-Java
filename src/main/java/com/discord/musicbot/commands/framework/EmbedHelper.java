@@ -146,8 +146,7 @@ public class EmbedHelper {
                     title = title.substring(0, 57) + "...";
                 }
                 
-                String trackDuration = track.getDuration() == 0 ? "Unknown" : formatTime(track.getDuration());
-                description.append(String.format("%d. %s [%s]\n", i + 1, title, trackDuration));
+                description.append(String.format("%d. %s\n", i + 1, title));
             }
             description.append("```\n");
         } else if (current == null) {

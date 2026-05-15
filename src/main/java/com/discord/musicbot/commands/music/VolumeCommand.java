@@ -15,6 +15,7 @@ public class VolumeCommand extends SlashCommand {
     @Override
     public void execute(CommandContext ctx) {
         int vol = ctx.getOption("level").getAsInt();
+        vol = Math.max(1, Math.min(200, vol));
         ctx.getScheduler().setVolume(vol);
         ctx.replySuccess("Volume set to " + vol + "%");
     }

@@ -161,9 +161,85 @@ public class PlayerManager {
         });
     }
 
+    private String getSpotifyAccessToken() {
+        try {
+            io.github.cdimascio.dotenv.Dotenv dotenv = io.github.cdimascio.dotenv.Dotenv.load();
+            String clientId = dotenv.get("SPOTIFY_CLIENT_ID");
+            String clientSecret = dotenv.get("SPOTIFY_CLIENT_SECRET");
+            if (clientId == null || clientId.isEmpty() || clientSecret == null || clientSecret.isEmpty() || clientId.contains("your_")) return null;
+
+            String auth = java.util.Base64.getEncoder().encodeToString((clientId + ":" + clientSecret).getBytes());
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("https://accounts.spotify.com/api/token"))
+                    .header("Authorization", "Basic " + auth)
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString("grant_type=client_credentials"))
+                    .build();
+
+            java.net.http.HttpResponse<String> response = java.net.http.HttpClient.newHttpClient().send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.body());
+            return root.path("access_token").asText(null);
+        } catch (Exception e) {
+            logger.error("Failed to get Spotify access token", e);
+            return null;
+        }
+    }
+
     private CompletableFuture<List<SpotifyMetadata>> fetchSpotifyPlaylist(String url) {
         return CompletableFuture.supplyAsync(() -> {
             List<SpotifyMetadata> tracks = new ArrayList<>();
+            String token = getSpotifyAccessToken();
+            if (token != null) {
+                try {
+                    String id = url.split("\\?")[0].replaceAll(".*/(playlist|album)/", "");
+                    boolean isAlbum = url.contains("/album/");
+                    String apiUrl = isAlbum ? "https://api.spotify.com/v1/albums/" + id + "/tracks?limit=50" : "https://api.spotify.com/v1/playlists/" + id + "/tracks?limit=100";
+                    
+                    while (apiUrl != null && !apiUrl.isEmpty() && !apiUrl.equals("null")) {
+                        java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                                .uri(java.net.URI.create(apiUrl))
+                                .header("Authorization", "Bearer " + token)
+                                .GET()
+                                .build();
+                        java.net.http.HttpResponse<String> response = java.net.http.HttpClient.newHttpClient().send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+                        com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.body());
+                        
+                        com.fasterxml.jackson.databind.JsonNode items = root.path("items");
+                        for (com.fasterxml.jackson.databind.JsonNode item : items) {
+                            com.fasterxml.jackson.databind.JsonNode trackData = isAlbum ? item : item.path("track");
+                            if (trackData.isMissingNode() || trackData.isNull()) continue;
+                            
+                            String name = trackData.path("name").asText("");
+                            if (name.isEmpty()) continue;
+                            
+                            StringBuilder artistStr = new StringBuilder();
+                            com.fasterxml.jackson.databind.JsonNode artists = trackData.path("artists");
+                            if (artists.isArray()) {
+                                for (int i = 0; i < artists.size(); i++) {
+                                    if (i > 0) artistStr.append(", ");
+                                    artistStr.append(artists.get(i).path("name").asText(""));
+                                }
+                            }
+                            
+                            String artwork = null;
+                            if (!isAlbum) {
+                                com.fasterxml.jackson.databind.JsonNode images = trackData.path("album").path("images");
+                                if (images.isArray() && images.size() > 0) {
+                                    artwork = images.get(0).path("url").asText(null);
+                                }
+                            }
+                            
+                            tracks.add(new SpotifyMetadata("ytsearch:" + name + " " + artistStr.toString(), artwork));
+                        }
+                        
+                        apiUrl = root.path("next").asText(null);
+                    }
+                    logger.info("Spotify API: Extracted {} tracks from {}", tracks.size(), url);
+                    return tracks;
+                } catch (Exception e) {
+                    logger.error("Spotify API error, falling back to scraper...", e);
+                }
+            }
             try {
                 java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
                 java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
@@ -398,13 +474,23 @@ public class PlayerManager {
 
             @Override
             public void playlistLoaded(AudioPlaylist playlist) {
-                if (playlist.isSearchResult() && !playlist.getTracks().isEmpty()) {
-                    AudioTrack track = playlist.getTracks().get(0);
-                    track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
-                    musicManager.getScheduler().playInstant(track);
-                    event.getHook().sendMessage("**Playing Now:** " + track.getInfo().title).queue();
+                if (playlist.getTracks().isEmpty()) {
+                    event.getHook().sendMessage("No tracks found.").queue();
+                    return;
+                }
+                AudioTrack track = playlist.getTracks().get(0);
+                track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
+                musicManager.getScheduler().playInstant(track);
+                
+                if (!playlist.isSearchResult() && playlist.getTracks().size() > 1) {
+                    for (int i = 1; i < playlist.getTracks().size(); i++) {
+                        AudioTrack t = playlist.getTracks().get(i);
+                        t.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
+                        musicManager.getScheduler().getQueueRaw().offer(t);
+                    }
+                    event.getHook().sendMessage("<:success1:1461351761607393453> Instant Playing **" + escapeMarkdown(track.getInfo().title) + "** • Queued `" + (playlist.getTracks().size() - 1) + "` tracks").queue();
                 } else {
-                    event.getHook().sendMessage("Cannot instant play playlists.").queue();
+                    event.getHook().sendMessage("**Playing Now:** " + escapeMarkdown(track.getInfo().title)).queue();
                 }
             }
 
@@ -450,15 +536,23 @@ public class PlayerManager {
 
             @Override
             public void playlistLoaded(AudioPlaylist playlist) {
-                if (playlist.isSearchResult() && !playlist.getTracks().isEmpty()) {
+                if (playlist.getTracks().isEmpty()) {
+                    event.getHook().sendMessage("No tracks found.").queue();
+                    return;
+                }
+                
+                if (playlist.isSearchResult()) {
                     AudioTrack track = playlist.getTracks().get(0);
                     track.setUserData(event.getUser());
                     musicManager.getScheduler().insert(track, position);
-                    String displayTitle = escapeMarkdown(track.getInfo().title);
-                    event.getHook().sendMessage("<:success1:1461351761607393453> Inserted **" + displayTitle
-                            + "** • Position: `" + position + "`").queue();
+                    event.getHook().sendMessage("<:success1:1461351761607393453> Inserted **" + escapeMarkdown(track.getInfo().title) + "** • Position: `" + (position + 1) + "`").queue();
                 } else {
-                    event.getHook().sendMessage("Cannot insert playlists.").queue();
+                    int currentPos = position;
+                    for (AudioTrack track : playlist.getTracks()) {
+                        track.setUserData(event.getUser());
+                        musicManager.getScheduler().insert(track, currentPos++);
+                    }
+                    event.getHook().sendMessage("<:success1:1461351761607393453> Inserted `" + playlist.getTracks().size() + "` tracks • Starting at Position: `" + (position + 1) + "`").queue();
                 }
             }
 

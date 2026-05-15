@@ -66,8 +66,8 @@ public class BotLauncher {
 
                         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                                 logger.info("Shutting down bot...");
-                                com.discord.musicbot.data.SessionManager.getInstance().saveAllNow();
                                 PlayerManager.getInstance().shutdown();
+                                com.discord.musicbot.data.SessionManager.getInstance().saveAllNow();
                                 try {
                                         Thread.sleep(2000); // Give time for message deletion
                                 } catch (InterruptedException e) {

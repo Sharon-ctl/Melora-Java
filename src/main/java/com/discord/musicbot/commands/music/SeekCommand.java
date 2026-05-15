@@ -17,11 +17,20 @@ public class SeekCommand extends SlashCommand {
         String timeStr = ctx.getOption("time").getAsString();
         long millis = parseTime(timeStr);
         if (millis < 0) {
-            ctx.replyError("Invalid time format. Use mm:ss or hh:mm:ss");
+            ctx.replyError("Invalid time format. Use seconds, mm:ss, or hh:mm:ss");
             return;
         }
+        
+        var track = ctx.getScheduler().getCurrentTrack();
+        if (track != null) {
+            long dur = track.getDuration();
+            if (millis > dur) {
+                millis = Math.max(0, dur - 1000);
+            }
+        }
+        
         ctx.getScheduler().seek(millis);
-        ctx.replySuccess("Seeked to " + timeStr);
+        ctx.replySuccess("Seeked to " + com.discord.musicbot.commands.framework.EmbedHelper.formatTime(millis));
     }
 
     @Override
@@ -33,7 +42,14 @@ public class SeekCommand extends SlashCommand {
     @Override
     public boolean requiresBotInVoice() { return true; }
 
-        private long parseTime(String time) {
+    private long parseTime(String time) {
+        if (!time.contains(":")) {
+            try {
+                return Long.parseLong(time) * 1000;
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
         String[] parts = time.split(":");
         try {
             if (parts.length == 2) {

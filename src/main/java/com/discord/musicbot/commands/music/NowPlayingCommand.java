@@ -13,6 +13,10 @@ public class NowPlayingCommand extends SlashCommand {
 
     @Override
     public void execute(CommandContext ctx) {
+        if (ctx.getScheduler().getCurrentTrack() == null) {
+            ctx.replyEphemeral("Nothing is playing right now.");
+            return;
+        }
         ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
         ctx.getMusicManager().sendNowPlayingMessage(true);
         ctx.replyEphemeral("Now playing widget created.");

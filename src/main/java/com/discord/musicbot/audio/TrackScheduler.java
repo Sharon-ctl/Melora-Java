@@ -253,6 +253,15 @@ public class TrackScheduler extends AudioEventAdapter {
                                 musicManager.deleteNowPlayingMessage();
                                 musicManager.updateVoiceChannelStatus("<:addmusic3:1504821095201505390> Use /play to queue a song");
                                 musicManager.startIdleTimeout();
+                                if (musicManager.getNowPlayingChannelId() != null) {
+                                    try {
+                                        net.dv8tion.jda.api.entities.channel.concrete.TextChannel tc = musicManager.getGuild()
+                                            .getTextChannelById(musicManager.getNowPlayingChannelId());
+                                        if (tc != null) {
+                                            tc.sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_ERROR + " Autoplay ran out of recommendations.").queue();
+                                        }
+                                    } catch (Exception ignored) {}
+                                }
                                 musicManager.notifySessionChanged();
                             }
                         });

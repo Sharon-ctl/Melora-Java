@@ -668,16 +668,26 @@ public class MusicManager {
             if (guild.getAudioManager().isConnected()) {
                 guild.getAudioManager().closeAudioConnection();
             }
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
+        
         try {
-            scheduler.stop();
-        } catch (Exception ignored) {
-        }
+            notifySessionChanged(); // Force save before shutdown
+        } catch (Exception ignored) {}
+
         try {
-            destroy();
-        } catch (Exception ignored) {
-        }
+            updateVoiceChannelStatus("");
+            deleteNowPlayingMessage(true);
+        } catch (Exception ignored) {}
+
+        cancelIdleTimeout();
+        idleExecutor.shutdownNow();
+        if (aloneTask != null) aloneTask.cancel(true);
+        aloneExecutor.shutdownNow();
+        if (watchdogTask != null) watchdogTask.cancel(true);
+        watchdogExecutor.shutdownNow();
+
+        player.destroy();
+        logger.debug("MusicManager cleanly shutdown for guild: {}", guild.getName());
     }
 
     private String lastVCStatusString = "";
