@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "puppeteer-core": "^25.0.2",
-    "youtube-po-token-generator": "^0.6.0"
-  }
-}
