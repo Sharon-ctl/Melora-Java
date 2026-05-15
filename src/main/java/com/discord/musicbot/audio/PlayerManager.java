@@ -109,8 +109,8 @@ public class PlayerManager {
         return String.format("%02d:%02d", minutes, seconds);
     }
 
-    private record SpotifyMetadata(String query, String artworkUrl) {
-    }
+    private record SpotifyMetadata(String query, String artworkUrl) {}
+    private record SpotifyPlaylistResult(String name, List<SpotifyMetadata> tracks) {}
 
     private CompletableFuture<SpotifyMetadata> fetchSpotifyMetadata(String url) {
         return CompletableFuture.supplyAsync(() -> {
@@ -185,155 +185,164 @@ public class PlayerManager {
         }
     }
 
-    private CompletableFuture<List<SpotifyMetadata>> fetchSpotifyPlaylist(String url) {
+    private CompletableFuture<SpotifyPlaylistResult> fetchSpotifyPlaylist(String url) {
         return CompletableFuture.supplyAsync(() -> {
             List<SpotifyMetadata> tracks = new ArrayList<>();
-            String token = getSpotifyAccessToken();
-            if (token != null) {
-                try {
-                    String id = url.split("\\?")[0].replaceAll(".*/(playlist|album)/", "");
-                    boolean isAlbum = url.contains("/album/");
-                    String apiUrl = isAlbum ? "https://api.spotify.com/v1/albums/" + id + "/tracks?limit=50" : "https://api.spotify.com/v1/playlists/" + id + "/tracks?limit=100";
-                    
-                    while (apiUrl != null && !apiUrl.isEmpty() && !apiUrl.equals("null")) {
-                        java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                                .uri(java.net.URI.create(apiUrl))
-                                .header("Authorization", "Bearer " + token)
-                                .GET()
-                                .build();
-                        java.net.http.HttpResponse<String> response = java.net.http.HttpClient.newHttpClient().send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-                        com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.body());
-                        
-                        com.fasterxml.jackson.databind.JsonNode items = root.path("items");
-                        for (com.fasterxml.jackson.databind.JsonNode item : items) {
-                            com.fasterxml.jackson.databind.JsonNode trackData = isAlbum ? item : item.path("track");
-                            if (trackData.isMissingNode() || trackData.isNull()) continue;
-                            
-                            String name = trackData.path("name").asText("");
-                            if (name.isEmpty()) continue;
-                            
-                            StringBuilder artistStr = new StringBuilder();
-                            com.fasterxml.jackson.databind.JsonNode artists = trackData.path("artists");
-                            if (artists.isArray()) {
-                                for (int i = 0; i < artists.size(); i++) {
-                                    if (i > 0) artistStr.append(", ");
-                                    artistStr.append(artists.get(i).path("name").asText(""));
-                                }
-                            }
-                            
-                            String artwork = null;
-                            if (!isAlbum) {
-                                com.fasterxml.jackson.databind.JsonNode images = trackData.path("album").path("images");
-                                if (images.isArray() && images.size() > 0) {
-                                    artwork = images.get(0).path("url").asText(null);
-                                }
-                            }
-                            
-                            tracks.add(new SpotifyMetadata("ytsearch:" + name + " " + artistStr.toString(), artwork));
-                        }
-                        
-                        apiUrl = root.path("next").asText(null);
-                    }
-                    logger.info("Spotify API: Extracted {} tracks from {}", tracks.size(), url);
-                    return tracks;
-                } catch (Exception e) {
-                    logger.error("Spotify API error, falling back to scraper...", e);
-                }
-            }
+            String playlistName = "Spotify Playlist";
+            boolean isAlbum = url.contains("/album/");
+
             try {
                 java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-                java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                java.net.http.HttpRequest nameReq = java.net.http.HttpRequest.newBuilder()
                         .uri(java.net.URI.create(url))
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                         .GET()
                         .build();
-                java.net.http.HttpResponse<String> response = client.send(request,
+                java.net.http.HttpResponse<String> nameResp = client.send(nameReq,
                         java.net.http.HttpResponse.BodyHandlers.ofString());
-                String html = response.body();
+                String html = nameResp.body();
 
-                // Extract the Base64-encoded initialState JSON from the page
+                // Extract playlist/album name from og:title
+                java.util.regex.Matcher nameMatcher = java.util.regex.Pattern
+                        .compile("<meta property=\"og:title\" content=\"([^\"]+)\"").matcher(html);
+                if (nameMatcher.find()) {
+                    playlistName = nameMatcher.group(1);
+                }
+
+                // Parse initialState for tracks
                 java.util.regex.Matcher stateMatcher = java.util.regex.Pattern
                         .compile("<script id=\"initialState\"[^>]*>([A-Za-z0-9+/=]+)</script>")
                         .matcher(html);
 
-                if (!stateMatcher.find()) {
-                    logger.warn("Spotify: Could not find initialState script tag in HTML");
-                    return tracks;
-                }
+                int totalCount = 0;
+                if (stateMatcher.find()) {
+                    String base64 = stateMatcher.group(1);
+                    String json = new String(java.util.Base64.getDecoder().decode(base64),
+                            java.nio.charset.StandardCharsets.UTF_8);
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
 
-                String base64 = stateMatcher.group(1);
-                String json = new String(java.util.Base64.getDecoder().decode(base64),
-                        java.nio.charset.StandardCharsets.UTF_8);
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
+                    com.fasterxml.jackson.databind.JsonNode entities = root.path("entities").path("items");
+                    if (!entities.isMissingNode()) {
+                        java.util.Iterator<String> fieldNames = entities.fieldNames();
+                        if (fieldNames.hasNext()) {
+                            String entityKey = fieldNames.next();
+                            com.fasterxml.jackson.databind.JsonNode entity = entities.get(entityKey);
 
-                com.fasterxml.jackson.databind.JsonNode entities = root.path("entities").path("items");
-                if (entities.isMissingNode()) {
-                    logger.warn("Spotify: entities.items missing from initialState");
-                    return tracks;
-                }
+                            String entityName = entity.path("name").asText("");
+                            if (!entityName.isEmpty()) {
+                                playlistName = entityName;
+                            }
 
-                // Find the first entity key (e.g. "spotify:playlist:xxx" or
-                // "spotify:album:xxx")
-                java.util.Iterator<String> fieldNames = entities.fieldNames();
-                if (!fieldNames.hasNext())
-                    return tracks;
-                String entityKey = fieldNames.next();
-                com.fasterxml.jackson.databind.JsonNode entity = entities.get(entityKey);
+                            com.fasterxml.jackson.databind.JsonNode itemsNode;
+                            if (isAlbum) {
+                                itemsNode = entity.path("tracksV2").path("items");
+                                totalCount = entity.path("tracksV2").path("totalCount").asInt(0);
+                            } else {
+                                itemsNode = entity.path("content").path("items");
+                                totalCount = entity.path("content").path("totalCount").asInt(0);
+                            }
 
-                boolean isAlbum = url.contains("/album/");
-                com.fasterxml.jackson.databind.JsonNode itemsNode;
+                            if (itemsNode.isArray()) {
+                                for (com.fasterxml.jackson.databind.JsonNode item : itemsNode) {
+                                    try {
+                                        com.fasterxml.jackson.databind.JsonNode trackData;
+                                        if (isAlbum) {
+                                            trackData = item.path("track");
+                                        } else {
+                                            trackData = item.path("itemV2").path("data");
+                                        }
+                                        String name = trackData.path("name").asText("");
+                                        if (name.isEmpty()) continue;
 
-                if (isAlbum) {
-                    // Albums: entity.tracksV2.items[].track.{name, artists}
-                    itemsNode = entity.path("tracksV2").path("items");
-                } else {
-                    // Playlists: entity.content.items[].itemV2.data.{name, artists}
-                    itemsNode = entity.path("content").path("items");
-                }
-
-                if (!itemsNode.isArray()) {
-                    logger.warn("Spotify: items node is not an array");
-                    return tracks;
-                }
-
-                for (com.fasterxml.jackson.databind.JsonNode item : itemsNode) {
-                    try {
-                        com.fasterxml.jackson.databind.JsonNode trackData;
-                        if (isAlbum) {
-                            trackData = item.path("track");
-                        } else {
-                            trackData = item.path("itemV2").path("data");
-                        }
-
-                        String name = trackData.path("name").asText("");
-                        if (name.isEmpty())
-                            continue;
-
-                        // Build artist string
-                        StringBuilder artistStr = new StringBuilder();
-                        com.fasterxml.jackson.databind.JsonNode artistItems = trackData.path("artists").path("items");
-                        if (artistItems.isArray()) {
-                            for (int i = 0; i < artistItems.size(); i++) {
-                                if (i > 0)
-                                    artistStr.append(", ");
-                                artistStr.append(artistItems.get(i).path("profile").path("name").asText(""));
+                                        StringBuilder artistStr = new StringBuilder();
+                                        com.fasterxml.jackson.databind.JsonNode artistItems = trackData.path("artists").path("items");
+                                        if (artistItems.isArray()) {
+                                            for (int i = 0; i < artistItems.size(); i++) {
+                                                if (i > 0) artistStr.append(", ");
+                                                artistStr.append(artistItems.get(i).path("profile").path("name").asText(""));
+                                            }
+                                        }
+                                        tracks.add(new SpotifyMetadata("ytsearch:" + name + " " + artistStr.toString(), null));
+                                    } catch (Exception e) {
+                                        logger.debug("Spotify: Failed to parse track item", e);
+                                    }
+                                }
                             }
                         }
-
-                        String searchQuery = "ytsearch:" + name + " " + artistStr.toString();
-                        tracks.add(new SpotifyMetadata(searchQuery, null));
-                    } catch (Exception e) {
-                        logger.debug("Spotify: Failed to parse individual track item", e);
                     }
                 }
 
-                logger.info("Spotify: Extracted {} tracks from {}", tracks.size(), url);
+                // If there are more tracks than what the scraper got, try Spotify API
+                if (totalCount > tracks.size()) {
+                    String token = getSpotifyAccessToken();
+                    if (token != null) {
+                        try {
+                            List<SpotifyMetadata> apiTracks = new ArrayList<>();
+                            String id = url.split("\\?")[0].replaceAll(".*/(playlist|album)/", "");
+                            String apiUrl = isAlbum
+                                    ? "https://api.spotify.com/v1/albums/" + id + "/tracks?limit=50"
+                                    : "https://api.spotify.com/v1/playlists/" + id + "/tracks?limit=100";
+
+                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                            while (apiUrl != null && !apiUrl.isEmpty() && !apiUrl.equals("null")) {
+                                java.net.http.HttpRequest apiReq = java.net.http.HttpRequest.newBuilder()
+                                        .uri(java.net.URI.create(apiUrl))
+                                        .header("Authorization", "Bearer " + token)
+                                        .GET()
+                                        .build();
+                                java.net.http.HttpResponse<String> apiResp = client
+                                        .send(apiReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+                                com.fasterxml.jackson.databind.JsonNode apiRoot = mapper.readTree(apiResp.body());
+
+                                com.fasterxml.jackson.databind.JsonNode items = apiRoot.path("items");
+                                for (com.fasterxml.jackson.databind.JsonNode apiItem : items) {
+                                    com.fasterxml.jackson.databind.JsonNode td = isAlbum ? apiItem : apiItem.path("track");
+                                    if (td.isMissingNode() || td.isNull()) continue;
+
+                                    String trackName = td.path("name").asText("");
+                                    if (trackName.isEmpty()) continue;
+
+                                    StringBuilder artists = new StringBuilder();
+                                    com.fasterxml.jackson.databind.JsonNode artistArr = td.path("artists");
+                                    if (artistArr.isArray()) {
+                                        for (int i = 0; i < artistArr.size(); i++) {
+                                            if (i > 0) artists.append(", ");
+                                            artists.append(artistArr.get(i).path("name").asText(""));
+                                        }
+                                    }
+
+                                    String artwork = null;
+                                    if (!isAlbum) {
+                                        com.fasterxml.jackson.databind.JsonNode images = td.path("album").path("images");
+                                        if (images.isArray() && images.size() > 0) {
+                                            artwork = images.get(0).path("url").asText(null);
+                                        }
+                                    }
+                                    apiTracks.add(new SpotifyMetadata("ytsearch:" + trackName + " " + artists, artwork));
+                                }
+                                apiUrl = apiRoot.path("next").asText(null);
+                            }
+
+                            if (!apiTracks.isEmpty()) {
+                                tracks = apiTracks; // Replace scraped with full API data
+                                logger.info("Spotify API: Extracted {} tracks from '{}'", tracks.size(), playlistName);
+                            }
+                        } catch (Exception e) {
+                            logger.error("Spotify API pagination failed, using scraped tracks", e);
+                        }
+                    } else {
+                        logger.warn("Spotify: '{}' has {} tracks but only {} loaded. Set SPOTIFY_CLIENT_ID/SECRET in .env for full playlists.",
+                                playlistName, totalCount, tracks.size());
+                    }
+                }
+
+                logger.info("Spotify: Final result: {} tracks from '{}'", tracks.size(), playlistName);
 
             } catch (Exception e) {
                 logger.error("Failed to fetch Spotify playlist: " + url, e);
             }
-            return tracks;
+            return new SpotifyPlaylistResult(playlistName, tracks);
         });
     }
 
@@ -355,13 +364,13 @@ public class PlayerManager {
                 String type = trackUrl.contains("/album/") ? "Album" : "Playlist";
                 String userId = event.getUser().getId();
                 // Fetch + queue in background — tracks appear progressively in the queue
-                fetchSpotifyPlaylist(trackUrl).thenAccept(tracks -> {
-                    if (tracks == null || tracks.isEmpty()) {
+                fetchSpotifyPlaylist(trackUrl).thenAccept(result -> {
+                    if (result == null || result.tracks().isEmpty()) {
                         event.getHook().sendMessage("<:error1:1461351972924817552> Spotify " + type.toLowerCase()
                                 + " is empty or could not be loaded.").queue();
                         return;
                     }
-                    for (SpotifyMetadata meta : tracks) {
+                    for (SpotifyMetadata meta : result.tracks()) {
                         com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo info = new com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo(
                                 meta.query().replace("ytsearch:", ""), "Spotify", 0, "spotify", true, meta.query());
                         DeferredTrack track = new DeferredTrack(info, meta.query(), meta.artworkUrl());
@@ -369,8 +378,8 @@ public class PlayerManager {
                         musicManager.getScheduler().queue(track);
                     }
                     musicManager.updateNowPlayingMessage();
-                    event.getHook().sendMessage("<:success1:1461351761607393453> Queued **" + tracks.size()
-                            + " tracks** from Spotify " + type + ".").queue();
+                    event.getHook().sendMessage("<:success1:1461351761607393453> Queued **" + result.tracks().size()
+                            + " tracks** from `" + escapeMarkdown(result.name()) + "`").queue();
                 });
             } else {
                 fetchSpotifyMetadata(trackUrl).thenAccept(meta -> {
