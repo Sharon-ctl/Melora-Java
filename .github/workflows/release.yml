@@ -28,5 +28,5 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/discord-music-bot-1.0.0-shaded.jar
+          files: target/discord-music-bot-1.0.0.jar
           generate_release_notes: true
