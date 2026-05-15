@@ -42,13 +42,7 @@ public class PlayerManager {
         playerManager.setFrameBufferDuration(1000);
 
         // --- Register YouTube Source (v2) ---
-        // Register additional clients (like TvHtml5Embedded) that are less prone to 403s even without a PoToken
-        YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(true,
-                new dev.lavalink.youtube.clients.Music(),
-                new dev.lavalink.youtube.clients.Web(),
-                new dev.lavalink.youtube.clients.AndroidVr(),
-                new dev.lavalink.youtube.clients.TvHtml5Embedded(),
-                new dev.lavalink.youtube.clients.WebEmbeddedPlayer());
+        YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(true);
         
         try {
             io.github.cdimascio.dotenv.Dotenv dotenv = io.github.cdimascio.dotenv.Dotenv.load();
