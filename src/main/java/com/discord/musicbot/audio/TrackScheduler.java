@@ -156,7 +156,7 @@ public class TrackScheduler extends AudioEventAdapter {
         playbackGeneration.incrementAndGet();
         if (currentTrack != null) {
             history.addFirst(currentTrack.makeClone());
-            if (history.size() > 50)
+            if (history.size() > 25)
                 history.removeLast();
         }
 
@@ -554,6 +554,7 @@ public class TrackScheduler extends AudioEventAdapter {
         loopMode = LoopMode.OFF;
         autoplay = false;
         cancelPreload();
+        musicManager.updateVoiceChannelStatus("<:addmusic3:1504821095201505390> Use /play to queue a song");
         musicManager.notifySessionChanged();
     }
 
