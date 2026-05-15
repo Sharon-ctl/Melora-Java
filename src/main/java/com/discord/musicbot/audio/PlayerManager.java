@@ -46,18 +46,18 @@ public class PlayerManager {
         
         try {
             io.github.cdimascio.dotenv.Dotenv dotenv = io.github.cdimascio.dotenv.Dotenv.load();
-            String poToken = dotenv.get("YOUTUBE_PO_TOKEN");
-            String visitorData = dotenv.get("YOUTUBE_VISITOR_DATA");
+            String oauthToken = dotenv.get("YOUTUBE_OAUTH2_TOKEN");
             
-            if (poToken != null && !poToken.isEmpty() && visitorData != null && !visitorData.isEmpty()) {
-                // Use reflection to set PoToken and VisitorData to avoid version incompatibility crashes
-                Class<?> webClass = Class.forName("dev.lavalink.youtube.clients.Web");
-                java.lang.reflect.Method setTokenMethod = webClass.getMethod("setPoTokenAndVisitorData", String.class, String.class);
-                setTokenMethod.invoke(null, poToken, visitorData);
-                logger.info("YouTube PoToken and VisitorData configured successfully. This will bypass VPS 403 errors!");
+            if (oauthToken != null && !oauthToken.isEmpty()) {
+                youtube.useOauth2(oauthToken, true);
+                logger.info("YouTube OAuth2 token loaded! You should not experience any 403 errors.");
+            } else {
+                logger.warn("No YOUTUBE_OAUTH2_TOKEN found. The bot will use OAuth2 device authorization.");
+                logger.warn("CHECK THE CONSOLE BELOW for a Google Device Login code to authorize the bot!");
+                youtube.useOauth2(null, false);
             }
         } catch (Exception e) {
-            logger.warn("Could not configure YouTube PoToken (Ignore if you haven't set YOUTUBE_PO_TOKEN in .env). Error: {}", e.getMessage());
+            logger.warn("Could not configure YouTube OAuth2. Error: {}", e.getMessage());
         }
 
         playerManager.registerSourceManager(youtube);
