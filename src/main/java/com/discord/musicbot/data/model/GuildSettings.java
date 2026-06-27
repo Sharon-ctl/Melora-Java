@@ -23,6 +23,11 @@ public class GuildSettings {
     private int defaultVolume = 100;
     private String commandChannelId = null;
 
+    private boolean mode247Locked = false;
+    private String lockedVoiceChannelId = null;
+    private boolean crossfadeEnabled = false;
+    private int crossfadeDuration = 5;
+
     public synchronized int getVolume() { return volume; }
     public synchronized void setVolume(int volume) { this.volume = volume; }
 
@@ -67,4 +72,16 @@ public class GuildSettings {
 
     public synchronized String getCommandChannelId() { return commandChannelId; }
     public synchronized void setCommandChannelId(String commandChannelId) { this.commandChannelId = commandChannelId; }
+
+    public synchronized boolean isMode247Locked() { return mode247Locked; }
+    public synchronized void setMode247Locked(boolean mode247Locked) { this.mode247Locked = mode247Locked; }
+
+    public synchronized String getLockedVoiceChannelId() { return lockedVoiceChannelId; }
+    public synchronized void setLockedVoiceChannelId(String lockedVoiceChannelId) { this.lockedVoiceChannelId = lockedVoiceChannelId; }
+
+    public synchronized boolean isCrossfadeEnabled() { return crossfadeEnabled; }
+    public synchronized void setCrossfadeEnabled(boolean crossfadeEnabled) { this.crossfadeEnabled = crossfadeEnabled; }
+
+    public synchronized int getCrossfadeDuration() { return crossfadeDuration; }
+    public synchronized void setCrossfadeDuration(int crossfadeDuration) { this.crossfadeDuration = crossfadeDuration; }
 }

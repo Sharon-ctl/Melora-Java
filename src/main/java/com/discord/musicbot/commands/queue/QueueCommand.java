@@ -2,9 +2,21 @@ package com.discord.musicbot.commands.queue;
 
 import com.discord.musicbot.commands.framework.CommandContext;
 import com.discord.musicbot.commands.framework.SlashCommand;
+import com.discord.musicbot.commands.framework.EmbedHelper;
+import com.discord.musicbot.commands.playlist.PlaylistCommand;
+import com.discord.musicbot.data.model.PlaylistTrack;
+import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
-import net.dv8tion.jda.api.interactions.commands.OptionType;
+import net.dv8tion.jda.api.interactions.commands.build.OptionData;
+import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
+import net.dv8tion.jda.api.utils.FileUpload;
+import net.dv8tion.jda.api.EmbedBuilder;
+
+import java.util.List;
+import java.util.ArrayList;
 
 public class QueueCommand extends SlashCommand {
     @Override
@@ -15,38 +27,31 @@ public class QueueCommand extends SlashCommand {
     @Override
     public void execute(CommandContext ctx) {
         String sub = ctx.getEvent().getSubcommandName();
-        if (sub == null) {
-            handleList(ctx);
-            return;
-        }
+        if (sub == null) sub = "show";
 
         switch (sub) {
-            case "list":
-                handleList(ctx);
-                break;
-            case "find":
-                handleFind(ctx);
-                break;
-            case "dedupe":
-                int deduped = ctx.getScheduler().dedupeQueue();
-                ctx.replySuccess("Removed **" + deduped + "** duplicate tracks from the queue.");
-                break;
-            case "cleanup":
-                int cleaned = ctx.getScheduler().cleanupQueue();
-                ctx.replySuccess("Cleaned up **" + cleaned + "** tracks (duplicates/invalid) from the queue.");
-                break;
-            default:
-                ctx.replyError("Unknown subcommand.");
+            case "show": handleShow(ctx); break;
+            case "search": handleSearch(ctx); break;
+            case "deduplicate": handleDeduplicate(ctx); break;
+            case "compact": handleCompact(ctx); break;
+            case "reverse": handleReverse(ctx); break;
+            case "sort": handleSort(ctx); break;
+            case "slice": handleSlice(ctx); break;
+            case "shufflefrom": handleShuffleFrom(ctx); break;
+            case "swap": handleSwap(ctx); break;
+            case "export": handleExport(ctx); break;
+            case "import": handleImport(ctx); break;
+            default: ctx.replyError("Unknown subcommand.");
         }
     }
 
-    private void handleList(CommandContext ctx) {
+    private void handleShow(CommandContext ctx) {
         var pageOpt = ctx.getOption("page");
         int page = pageOpt != null ? Math.max(1, (int) pageOpt.getAsLong()) : 1;
         var userOpt = ctx.getOption("user");
         String filterUserId = userOpt != null ? userOpt.getAsString() : null;
         
-        var embed = com.discord.musicbot.commands.framework.EmbedHelper.createQueueEmbed(ctx.getMusicManager(), page, filterUserId);
+        var embed = EmbedHelper.createQueueEmbed(ctx.getMusicManager(), page, filterUserId);
         
         long filteredSize = filterUserId == null ? ctx.getScheduler().getQueueSize() : 
             ctx.getScheduler().getQueue().stream().filter(t -> {
@@ -62,32 +67,31 @@ public class QueueCommand extends SlashCommand {
             
         int maxPages = Math.max(1, (int) Math.ceil(filteredSize / 10.0));
         String prefix = filterUserId == null ? "queue" : "queue_" + filterUserId;
-        var components = com.discord.musicbot.commands.framework.EmbedHelper.createPaginationButtons(prefix, page, maxPages);
+        var components = EmbedHelper.createPaginationButtons(prefix, page, maxPages);
         ctx.getEvent().replyEmbeds(embed).setComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(components)).queue();
     }
 
-    private void handleFind(CommandContext ctx) {
+    private void handleSearch(CommandContext ctx) {
         String query = ctx.getOption("query").getAsString().toLowerCase();
-        java.util.List<com.sedmelluq.discord.lavaplayer.track.AudioTrack> queue = ctx.getScheduler().getQueue();
+        List<AudioTrack> queue = ctx.getScheduler().getQueue();
         
-        net.dv8tion.jda.api.EmbedBuilder eb = new net.dv8tion.jda.api.EmbedBuilder();
+        EmbedBuilder eb = new EmbedBuilder();
         eb.setTitle("Search Results in Queue");
-        eb.setColor(java.awt.Color.DARK_GRAY);
+        eb.setColor(EmbedHelper.COLOR_MAIN);
         
         StringBuilder sb = new StringBuilder();
         int count = 0;
         for (int i = 0; i < queue.size(); i++) {
-            com.sedmelluq.discord.lavaplayer.track.AudioTrack t = queue.get(i);
-            if (t.getInfo().title.toLowerCase().contains(query) || t.getInfo().author.toLowerCase().contains(query)) {
+            AudioTrack t = queue.get(i);
+            if (t.getInfo().title.toLowerCase().contains(query) || t.getInfo().author.toLowerCase().contains(query) || (t.getInfo().uri != null && t.getInfo().uri.toLowerCase().contains(query))) {
                 sb.append("`").append(i + 1).append(".` ").append(t.getInfo().title).append("\n");
                 count++;
                 if (count >= 15) break;
             }
         }
         
-        if (count == 0) {
-            eb.setDescription("No tracks matched your query.");
-        } else {
+        if (count == 0) eb.setDescription("No tracks matched your query.");
+        else {
             if (count >= 15) sb.append("*...and more*");
             eb.setDescription(sb.toString());
         }
@@ -95,8 +99,143 @@ public class QueueCommand extends SlashCommand {
         ctx.getEvent().replyEmbeds(eb.build()).queue();
     }
 
+    private void handleDeduplicate(CommandContext ctx) {
+        if (!checkDj(ctx)) return;
+        int deduped = ctx.getScheduler().dedupeQueue();
+        ctx.replySuccess("Removed **" + deduped + "** duplicate tracks from the queue.");
+    }
+
+    private void handleCompact(CommandContext ctx) {
+        if (!checkDj(ctx)) return;
+        int cleaned = ctx.getScheduler().cleanupQueue();
+        ctx.replySuccess("Cleaned up **" + cleaned + "** tracks (duplicates/invalid) from the queue.");
+    }
+
+    private void handleReverse(CommandContext ctx) {
+        if (!checkDj(ctx)) return;
+        ctx.getScheduler().reverseQueue();
+        ctx.replySuccess("Queue reversed.");
+    }
+
+    private void handleSort(CommandContext ctx) {
+        if (!checkDj(ctx)) return;
+        String mode = ctx.getOption("mode").getAsString();
+        ctx.getScheduler().sortQueue(mode);
+        ctx.replySuccess("Queue sorted by **" + mode + "**.");
+    }
+
+    private void handleSlice(CommandContext ctx) {
+        int start = (int) ctx.getOption("start").getAsLong();
+        int end = (int) ctx.getOption("end").getAsLong();
+        List<AudioTrack> queue = ctx.getScheduler().getQueue();
+        
+        if (start < 1 || start > queue.size() || end < start || end > queue.size()) {
+            ctx.replyError("Invalid range.");
+            return;
+        }
+        
+        EmbedBuilder eb = new EmbedBuilder();
+        eb.setTitle("Queue Slice (" + start + " to " + end + ")");
+        eb.setColor(EmbedHelper.COLOR_MAIN);
+        
+        StringBuilder sb = new StringBuilder();
+        for (int i = start - 1; i < Math.min(end, start + 14); i++) {
+            AudioTrack t = queue.get(i);
+            sb.append("`").append(i + 1).append(".` ").append(t.getInfo().title).append("\n");
+        }
+        if (end - start > 14) sb.append("*...and more*");
+        
+        eb.setDescription(sb.toString());
+        ctx.getEvent().replyEmbeds(eb.build()).queue();
+    }
+
+    private void handleShuffleFrom(CommandContext ctx) {
+        if (!checkDj(ctx)) return;
+        int index = (int) ctx.getOption("index").getAsLong();
+        ctx.getScheduler().shuffleFrom(index - 1);
+        ctx.replySuccess("Shuffled queue from position " + index + ".");
+    }
+
+    private void handleSwap(CommandContext ctx) {
+        if (!checkDj(ctx)) return;
+        int index1 = (int) ctx.getOption("pos1").getAsLong();
+        int index2 = (int) ctx.getOption("pos2").getAsLong();
+        boolean success = ctx.getScheduler().swap(index1 - 1, index2 - 1);
+        if (success) {
+            ctx.replySuccess("Swapped positions " + index1 + " and " + index2 + ".");
+        } else {
+            ctx.replyError("Invalid positions provided.");
+        }
+    }
+
+    private void handleExport(CommandContext ctx) {
+        List<AudioTrack> queue = ctx.getScheduler().getQueue();
+        if (queue.isEmpty()) {
+            ctx.replyError("The queue is empty.");
+            return;
+        }
+        
+        List<PlaylistTrack> exportData = new ArrayList<>();
+        for (AudioTrack t : queue) {
+            exportData.add(PlaylistCommand.audioTrackToPlaylistTrack(t));
+        }
+        
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            byte[] json = mapper.writeValueAsBytes(exportData);
+            ctx.getEvent().reply("Here is your queue export:")
+                .addFiles(FileUpload.fromData(json, "queue_export.json"))
+                .queue();
+        } catch (Exception e) {
+            ctx.replyError("Failed to export queue.");
+        }
+    }
+
+    private void handleImport(CommandContext ctx) {
+        if (!checkDj(ctx)) return;
+        net.dv8tion.jda.api.entities.Message.Attachment attachment = ctx.getOption("file").getAsAttachment();
+        if (!attachment.getFileExtension().equalsIgnoreCase("json")) {
+            ctx.replyError("Please upload a valid JSON file.");
+            return;
+        }
+        
+        ctx.deferReply();
+        attachment.getProxy().download().thenAccept(inputStream -> {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                List<PlaylistTrack> tracks = mapper.readValue(inputStream, mapper.getTypeFactory().constructCollectionType(List.class, PlaylistTrack.class));
+                
+                int queued = 0;
+                String requesterId = ctx.getUser().getId();
+                for (PlaylistTrack pt : tracks) {
+                    com.discord.musicbot.audio.PlayerManager.getInstance().loadItemOrdered(ctx.getGuild(), pt.getUri() != null ? pt.getUri() : "ytsearch:" + pt.getAuthor() + " " + pt.getTitle(), new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
+                        @Override
+                        public void trackLoaded(AudioTrack track) {
+                            track.setUserData("{\"requester\":\"" + requesterId + "\"}");
+                            ctx.getScheduler().queue(track);
+                        }
+                        @Override public void playlistLoaded(com.sedmelluq.discord.lavaplayer.track.AudioPlaylist playlist) {
+                            if (!playlist.getTracks().isEmpty()) trackLoaded(playlist.getTracks().get(0));
+                        }
+                        @Override public void noMatches() {}
+                        @Override public void loadFailed(com.sedmelluq.discord.lavaplayer.tools.FriendlyException exception) {}
+                    });
+                    queued++;
+                    if (queued >= 500) break;
+                }
+                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Started importing " + tracks.size() + " tracks from the JSON file.").queue();
+            } catch (Exception e) {
+                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Failed to parse JSON file.").queue();
+            }
+        });
+    }
+
+    private boolean checkDj(CommandContext ctx) {
+        return com.discord.musicbot.commands.framework.CommandRegistry.checkDjRole(ctx.getGuild(), ctx.getMember(), ctx.getMusicManager(), ctx.getEvent());
+    }
+
     @Override
-    public boolean requiresDj() { return false; } // Handled per-subcommand
+    public boolean requiresDj() { return false; }
 
     @Override
     public boolean requiresVoice() { return true; }
@@ -108,14 +247,33 @@ public class QueueCommand extends SlashCommand {
     public CommandData getCommandData() {
         return Commands.slash(getName(), "Manage the music queue")
                 .addSubcommands(
-                        new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("list", "View the current queue")
+                        new SubcommandData("show", "View the current queue")
                                 .addOption(OptionType.INTEGER, "page", "Page number", false)
                                 .addOption(OptionType.STRING, "user", "Filter queue by user", false, true),
-                        new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("find", "Search for a track in the queue")
+                        new SubcommandData("search", "Search for a track in the queue")
                                 .addOption(OptionType.STRING, "query", "Title or artist to search", true),
-                        new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("dedupe", "Remove duplicate tracks from the queue"),
-                        new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("cleanup", "Remove invalid/dead tracks from the queue")
+                        new SubcommandData("deduplicate", "Remove duplicate tracks from the queue"),
+                        new SubcommandData("compact", "Remove invalid/dead tracks from the queue"),
+                        new SubcommandData("reverse", "Reverse the order of the queue"),
+                        new SubcommandData("sort", "Sort the queue")
+                                .addOptions(
+                                        new OptionData(OptionType.STRING, "mode", "Sort criteria", true)
+                                                .addChoice("Title", "title")
+                                                .addChoice("Artist", "artist")
+                                                .addChoice("Duration", "duration")
+                                                .addChoice("Requester", "requester")
+                                ),
+                        new SubcommandData("slice", "View a specific segment of the queue")
+                                .addOption(OptionType.INTEGER, "start", "Start position", true)
+                                .addOption(OptionType.INTEGER, "end", "End position", true),
+                        new SubcommandData("shufflefrom", "Shuffle the queue starting from a specific position")
+                                .addOption(OptionType.INTEGER, "index", "Position to start shuffling from", true),
+                        new SubcommandData("swap", "Swap the position of two tracks")
+                                .addOption(OptionType.INTEGER, "pos1", "First track position", true)
+                                .addOption(OptionType.INTEGER, "pos2", "Second track position", true),
+                        new SubcommandData("export", "Export the current queue as a JSON file"),
+                        new SubcommandData("import", "Import a queue from a JSON file")
+                                .addOption(OptionType.ATTACHMENT, "file", "JSON file to import", true)
                 );
     }
 }
-

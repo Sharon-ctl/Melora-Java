@@ -30,6 +30,7 @@ public class BotLauncher {
                         com.discord.musicbot.commands.framework.CommandRegistry registry = new com.discord.musicbot.commands.framework.CommandRegistry();
                         registry.register(new com.discord.musicbot.commands.music.PlayCommand());
                         registry.register(new com.discord.musicbot.commands.music.PlayInstantCommand());
+                        registry.register(new com.discord.musicbot.commands.music.PlayRandomCommand());
                         registry.register(new com.discord.musicbot.commands.music.PauseCommand());
                         registry.register(new com.discord.musicbot.commands.music.ResumeCommand());
                         registry.register(new com.discord.musicbot.commands.music.KaraokeCommand());
@@ -62,6 +63,7 @@ public class BotLauncher {
                         registry.register(new com.discord.musicbot.commands.admin.DisconnectCommand());
                         registry.register(new com.discord.musicbot.commands.admin.LeaveCommand());
                         registry.register(new com.discord.musicbot.commands.admin.AutoplayCommand());
+                        registry.register(new com.discord.musicbot.commands.admin.CrossfadeCommand());
                         registry.register(new com.discord.musicbot.commands.admin.Mode247Command());
                         registry.register(new com.discord.musicbot.commands.admin.HelpCommand());
                         registry.register(new com.discord.musicbot.commands.admin.PingCommand());

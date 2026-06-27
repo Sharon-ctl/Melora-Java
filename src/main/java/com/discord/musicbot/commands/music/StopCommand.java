@@ -11,8 +11,13 @@ public class StopCommand extends SlashCommand {
         return "stop";
     }
 
-    @Override
     public void execute(CommandContext ctx) {
+        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(ctx.getGuild().getId());
+        if (settings.isMode247Locked() && !com.discord.musicbot.commands.framework.CommandRegistry.isAuthorizedForLock(ctx)) {
+            ctx.replyError("The 24/7 session is locked. You do not have permission to stop playback.");
+            return;
+        }
+
         if (ctx.getScheduler().getCurrentTrack() == null && ctx.getScheduler().getQueueSize() == 0) {
             ctx.replyError("Nothing is currently playing or queued!");
             return;

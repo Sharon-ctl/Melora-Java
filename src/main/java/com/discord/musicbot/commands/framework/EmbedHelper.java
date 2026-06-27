@@ -225,6 +225,7 @@ public class EmbedHelper {
             description.append(String.format("**%splay <song/url>** - Play a song or add it to the queue.\n\n", prefix));
             description.append(String.format("**%splayinstant <song/url>** - Play a song immediately, skipping the current track.\n\n", prefix));
             description.append(String.format("**%splaynext <song/url>** - Add a song to the top of the queue.\n\n", prefix));
+            description.append(String.format("**%splayrandom [source]** - Play a random track from favorites or history.\n\n", prefix));
             description.append(String.format("**%ssearch <query>** - Search for a song and pick from a list.\n\n", prefix));
             description.append(String.format("**%spause** - Pause the currently playing track.\n\n", prefix));
             description.append(String.format("**%sresume** - Resume the paused track.\n\n", prefix));
@@ -240,14 +241,25 @@ public class EmbedHelper {
             description.append(String.format("**%sautoplay** - Toggle automatic recommendations.\n\n", prefix));
             description.append(String.format("**%skaraoke** - Toggle Live Karaoke mode.\n\n", prefix));
             description.append(String.format("**%sfilter <filter>** - Apply audio filters (bassboost, 8d, vaporwave, etc).\n\n", prefix));
-            description.append(String.format("**%s247** - Keep the bot in the voice channel 24/7.\n", prefix));
+            description.append(String.format("**%scrossfade [duration]** - Enable PCM crossfading between tracks.\n\n", prefix));
+            description.append(String.format("**%s247 [lock]** - Keep the bot in the voice channel 24/7.\n", prefix));
         } else if (category.equals("queue")) {
-            description.append(String.format("**%squeue [page] [user]** - View all tracks in the current queue, optionally filtered by user.\n\n", prefix));
+            description.append(String.format("**%squeue show [page] [user]** - View all tracks in the current queue.\n\n", prefix));
+            description.append(String.format("**%squeue search <query>** - Search for a specific track within the queue.\n\n", prefix));
+            description.append(String.format("**%squeue deduplicate** - Scan and remove any duplicate entries.\n\n", prefix));
+            description.append(String.format("**%squeue compact** - Group identical tracks together sequentially.\n\n", prefix));
+            description.append(String.format("**%squeue reverse** - Invert the current play order of all queued tracks.\n\n", prefix));
+            description.append(String.format("**%squeue sort <criteria>** - Organize queue by title or author.\n\n", prefix));
+            description.append(String.format("**%squeue slice <start> <end>** - Remove a contiguous range of tracks.\n\n", prefix));
+            description.append(String.format("**%squeue shufflefrom <position>** - Shuffle tracks after a specific point.\n\n", prefix));
+            description.append(String.format("**%squeue swap <pos1> <pos2>** - Exchange the positions of two tracks.\n\n", prefix));
+            description.append(String.format("**%squeue export** - Export the current queue into a downloadable JSON file.\n\n", prefix));
+            description.append(String.format("**%squeue import <file>** - Import a JSON queue file to append to the active queue.\n\n", prefix));
             description.append(String.format("**%snowplaying** - View details about the currently playing track.\n\n", prefix));
             description.append(String.format("**%sshuffle** - Randomize the order of tracks in the queue.\n\n", prefix));
             description.append(String.format("**%sloop <mode>** - Set repeat mode: off, track, or queue.\n\n", prefix));
             description.append(String.format("**%sremove <number>** - Remove a specific track from the queue.\n\n", prefix));
-            description.append(String.format("**%sinsert <song/url> <position>** - Insert a song at a specific position in the queue.\n\n", prefix));
+            description.append(String.format("**%sinsert <song/url> <position>** - Insert a song at a specific position.\n\n", prefix));
             description.append(String.format("**%smove <from> <to>** - Move a track to a different position.\n\n", prefix));
             description.append(String.format("**%sclear** - Remove all tracks from the queue.\n\n", prefix));
             description.append(String.format("**%sjump <number>** - Skip directly to a specific track in the queue.\n\n", prefix));
@@ -299,6 +311,7 @@ public class EmbedHelper {
             case "play": description = "Play a song or add it to the queue.\n\n**Usage:** `" + prefix + "play <song/url>`"; break;
             case "playinstant": description = "Play a song immediately, skipping the current track.\n\n**Usage:** `" + prefix + "playinstant <song/url>`"; break;
             case "playnext": description = "Add a track to the top of the queue (plays next).\n\n**Usage:** `" + prefix + "playnext <query>`"; break;
+            case "playrandom": description = "Play a random track from your favorites or the bot's global history.\n\n**Usage:** `" + prefix + "playrandom [source]`"; break;
             case "search": description = "Searches for a song and gives you a menu to select from.\n\n**Usage:** `" + prefix + "search <query>`"; break;
             case "pause": description = "Pause the currently playing track.\n\n**Usage:** `" + prefix + "pause`"; break;
             case "resume": description = "Resume the paused track.\n\n**Usage:** `" + prefix + "resume`"; break;
@@ -312,8 +325,20 @@ public class EmbedHelper {
             case "leave": description = "Disconnect the bot from the voice channel.\n\n**Usage:** `" + prefix + "leave`"; break;
             case "disconnect": description = "Disconnect the bot from the voice channel.\n\n**Usage:** `" + prefix + "disconnect`"; break;
             case "autoplay": description = "Toggle automatic recommendations after the queue finishes.\n\n**Usage:** `" + prefix + "autoplay`"; break;
-            case "247": description = "Keep the bot in the voice channel 24/7 even if no music is playing.\n\n**Usage:** `" + prefix + "247`"; break;
-            case "queue": description = "View all tracks in the current queue. You can optionally filter to only see tracks queued by a specific user.\n\n**Usage:** `" + prefix + "queue [page] [user]`"; break;
+            case "crossfade": description = "Enable and configure PCM crossfading between tracks.\n\n**Usage:** `" + prefix + "crossfade [duration]`"; break;
+            case "247": description = "Keep the bot in the voice channel 24/7 even if no music is playing. Can optionally lock the bot to restrict dismissal.\n\n**Usage:** `" + prefix + "247 [lock]`"; break;
+            case "queue":
+            case "queue show": description = "View all tracks in the current queue. You can optionally filter to only see tracks queued by a specific user.\n\n**Usage:** `" + prefix + "queue show [page] [user]`"; break;
+            case "queue search": description = "Search for a specific track currently within the queue.\n\n**Usage:** `" + prefix + "queue search <query>`"; break;
+            case "queue deduplicate": description = "Scan the queue and remove any duplicate entries automatically.\n\n**Usage:** `" + prefix + "queue deduplicate`"; break;
+            case "queue compact": description = "Group identical tracks together in the queue sequentially.\n\n**Usage:** `" + prefix + "queue compact`"; break;
+            case "queue reverse": description = "Invert the current play order of all queued tracks.\n\n**Usage:** `" + prefix + "queue reverse`"; break;
+            case "queue sort": description = "Organize the queue alphabetically by track title or track author.\n\n**Usage:** `" + prefix + "queue sort <criteria>`"; break;
+            case "queue slice": description = "Remove a contiguous range of tracks from the queue.\n\n**Usage:** `" + prefix + "queue slice <start> <end>`"; break;
+            case "queue shufflefrom": description = "Shuffle only the tracks that occur after a specific point in the queue.\n\n**Usage:** `" + prefix + "queue shufflefrom <position>`"; break;
+            case "queue swap": description = "Exchange the positions of two specific tracks in the queue.\n\n**Usage:** `" + prefix + "queue swap <pos1> <pos2>`"; break;
+            case "queue export": description = "Export the current queue into a downloadable JSON file.\n\n**Usage:** `" + prefix + "queue export`"; break;
+            case "queue import": description = "Import an existing JSON queue file to append to the active queue.\n\n**Usage:** `" + prefix + "queue import <file>`"; break;
             case "nowplaying": description = "View details about the currently playing track.\n\n**Usage:** `" + prefix + "nowplaying`"; break;
             case "shuffle": description = "Randomize the order of tracks in the queue.\n\n**Usage:** `" + prefix + "shuffle`"; break;
             case "loop": description = "Set repeat mode: off, track, or queue.\n\n**Usage:** `" + prefix + "loop <mode>`"; break;

@@ -130,6 +130,20 @@ public class CommandRegistry {
         return false;
     }
 
+    public static boolean isAuthorizedForLock(CommandContext ctx) {
+        Member member = ctx.getMember();
+        if (member == null) return false;
+        if (member.hasPermission(net.dv8tion.jda.api.Permission.ADMINISTRATOR) || member.hasPermission(net.dv8tion.jda.api.Permission.MANAGE_SERVER) || member.isOwner()) return true;
+        
+        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(ctx.getGuild().getId());
+        String djRoleId = settings.getDjRole();
+        if (djRoleId != null) {
+            return member.getRoles().stream().anyMatch(r -> r.getId().equals(djRoleId));
+        } else {
+            return member.getRoles().stream().anyMatch(r -> r.getName().equalsIgnoreCase("DJ"));
+        }
+    }
+
     private boolean checkDjRole(CommandContext ctx) {
         return checkDjRole(ctx.getGuild(), ctx.getMember(), ctx.getMusicManager(), ctx.getEvent());
     }

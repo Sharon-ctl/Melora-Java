@@ -32,6 +32,7 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
     private final AudioPlayer player;
+    private final AudioPlayer secondaryPlayer;
     private final MusicManager musicManager;
     private final LinkedBlockingDeque<AudioTrack> queue;
     private final LinkedBlockingDeque<AudioTrack> history;
@@ -39,13 +40,57 @@ public class TrackScheduler extends AudioEventAdapter {
     private volatile AudioTrack currentTrack;
     private volatile LoopMode loopMode = LoopMode.OFF;
     private volatile boolean autoplay = false;
+    private volatile boolean primaryIsActive = true;
+    private volatile boolean crossfadeFired = false;
 
-    public TrackScheduler(AudioPlayer player, MusicManager musicManager) {
+    public TrackScheduler(AudioPlayer player, AudioPlayer secondaryPlayer, MusicManager musicManager) {
         this.player = player;
+        this.secondaryPlayer = secondaryPlayer;
         this.musicManager = musicManager;
         this.queue = new LinkedBlockingDeque<>();
         this.history = new LinkedBlockingDeque<>();
         this.playbackGeneration = new AtomicInteger(0);
+
+        PlayerManager.scheduledExecutor.scheduleAtFixedRate(this::checkCrossfade, 1, 1, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    public AudioPlayer getActivePlayer() {
+        return primaryIsActive ? player : secondaryPlayer;
+    }
+
+    private void checkCrossfade() {
+        if (isPaused()) return;
+        AudioTrack current = getActivePlayer().getPlayingTrack();
+        if (current == null) return;
+        
+        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(musicManager.getGuild().getId());
+        if (!settings.isCrossfadeEnabled() || settings.getCrossfadeDuration() <= 0) return;
+        
+        long remaining = current.getDuration() - current.getPosition();
+        long crossfadeMs = settings.getCrossfadeDuration() * 1000L;
+        
+        if (current.getDuration() < crossfadeMs * 3) return;
+        
+        if (remaining <= crossfadeMs && !crossfadeFired) {
+            AudioTrack next = queue.peek();
+            if (next != null && !(next instanceof DeferredTrack)) {
+                crossfadeFired = true;
+                next = queue.poll();
+                
+                AudioPlayer inactive = primaryIsActive ? secondaryPlayer : player;
+                inactive.startTrack(next, false);
+                
+                musicManager.getSendHandler().startCrossfade(crossfadeMs, primaryIsActive);
+                
+                primaryIsActive = !primaryIsActive;
+                currentTrack = next;
+                
+                musicManager.updateNowPlayingMessage();
+            }
+        }
+    }
+    public AudioTrack getCurrentTrack() {
+        return getActivePlayer().getPlayingTrack();
     }
 
     private volatile AudioTrack preloadedAutoplayTrack;
@@ -155,7 +200,7 @@ public class TrackScheduler extends AudioEventAdapter {
                 currentTrack = track; // Temporarily hold it
                 resolveAndPlayDeferred(deferred);
             } else {
-                player.startTrack(track, false);
+                getActivePlayer().startTrack(track, false);
                 currentTrack = track;
                 musicManager.cancelIdleTimeout();
             }
@@ -185,7 +230,11 @@ public class TrackScheduler extends AudioEventAdapter {
             if (history.size() > MAX_HISTORY)
                 history.removeLast();
         }
-        player.startTrack(track, false);
+        crossfadeFired = false;
+        musicManager.getSendHandler().stopCrossfade();
+        player.stopTrack();
+        secondaryPlayer.stopTrack();
+        getActivePlayer().startTrack(track, false);
         currentTrack = track;
         musicManager.cancelIdleTimeout();
         cancelPreload();
@@ -200,8 +249,13 @@ public class TrackScheduler extends AudioEventAdapter {
                 history.removeLast();
         }
 
+        crossfadeFired = false;
+        musicManager.getSendHandler().stopCrossfade();
+        player.stopTrack();
+        secondaryPlayer.stopTrack();
+
         if (loopMode == LoopMode.TRACK && currentTrack != null) {
-            player.startTrack(currentTrack.makeClone(), false);
+            getActivePlayer().startTrack(currentTrack.makeClone(), false);
             return;
         }
 
@@ -216,7 +270,7 @@ public class TrackScheduler extends AudioEventAdapter {
         }
 
         if (next != null) {
-            player.startTrack(next, false);
+            getActivePlayer().startTrack(next, false);
             currentTrack = next;
             musicManager.cancelIdleTimeout();
 
@@ -248,7 +302,7 @@ public class TrackScheduler extends AudioEventAdapter {
                     logger.info("Using pre-loaded autoplay track: {}", preloadedAutoplayTrack.getInfo().title);
                     AudioTrack track = preloadedAutoplayTrack;
                     preloadedAutoplayTrack = null;
-                    player.startTrack(track, false);
+                    getActivePlayer().startTrack(track, false);
                     currentTrack = track;
                     musicManager.cancelIdleTimeout();
 
@@ -684,11 +738,12 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
     public boolean isPaused() {
-        return player.isPaused();
+        return getActivePlayer().isPaused();
     }
 
-    public AudioTrack getCurrentTrack() {
-        return player.getPlayingTrack();
+    public void setPaused(boolean paused) {
+        player.setPaused(paused);
+        secondaryPlayer.setPaused(paused);
     }
 
     public List<AudioTrack> getQueue() {
@@ -876,8 +931,70 @@ public class TrackScheduler extends AudioEventAdapter {
         return removed;
     }
 
+    public void reverseQueue() {
+        playbackGeneration.incrementAndGet();
+        List<AudioTrack> list = new ArrayList<>(queue);
+        Collections.reverse(list);
+        queue.clear();
+        queue.addAll(list);
+        musicManager.notifySessionChanged();
+    }
+
+    public void sortQueue(String criteria) {
+        playbackGeneration.incrementAndGet();
+        List<AudioTrack> list = new ArrayList<>(queue);
+        switch (criteria.toLowerCase()) {
+            case "title":
+                list.sort(java.util.Comparator.comparing(t -> t.getInfo().title.toLowerCase()));
+                break;
+            case "artist":
+            case "author":
+                list.sort(java.util.Comparator.comparing(t -> t.getInfo().author.toLowerCase()));
+                break;
+            case "duration":
+                list.sort(java.util.Comparator.comparingLong(t -> t.getDuration()));
+                break;
+            case "requester":
+                list.sort(java.util.Comparator.comparing(t -> {
+                    Object ud = t.getUserData();
+                    if (ud instanceof net.dv8tion.jda.api.entities.User u) return u.getName();
+                    if (ud instanceof String s && s.contains("\"requester\":\"")) return s.split("\"requester\":\"")[1].split("\"")[0];
+                    if (ud instanceof String s) return s;
+                    return "";
+                }));
+                break;
+        }
+        queue.clear();
+        queue.addAll(list);
+        musicManager.notifySessionChanged();
+    }
+
+    public void shuffleFrom(int index) {
+        playbackGeneration.incrementAndGet();
+        List<AudioTrack> list = new ArrayList<>(queue);
+        if (index < 0 || index >= list.size()) return;
+        List<AudioTrack> sublist = list.subList(index, list.size());
+        Collections.shuffle(sublist);
+        queue.clear();
+        queue.addAll(list);
+        musicManager.notifySessionChanged();
+    }
+
+    public boolean swap(int index1, int index2) {
+        playbackGeneration.incrementAndGet();
+        List<AudioTrack> list = new ArrayList<>(queue);
+        if (index1 < 0 || index1 >= list.size() || index2 < 0 || index2 >= list.size()) return false;
+        Collections.swap(list, index1, index2);
+        queue.clear();
+        queue.addAll(list);
+        musicManager.notifySessionChanged();
+        return true;
+    }
+
+
     @Override
-    public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
+    public void onTrackEnd(AudioPlayer pl, AudioTrack track, AudioTrackEndReason endReason) {
+        logger.info("Track End: " + track.getInfo().title + " Reason: " + endReason);
         if (trackStartTimeMs > 0) {
             long durationPlayed = System.currentTimeMillis() - trackStartTimeMs;
             if (durationPlayed >= 30000 || durationPlayed >= (track.getDuration() * 0.4)) {
@@ -889,7 +1006,12 @@ public class TrackScheduler extends AudioEventAdapter {
         trackStartTimeMs = 0;
 
         if (endReason.mayStartNext) {
-            nextTrack();
+            if (crossfadeFired && pl != getActivePlayer()) {
+                crossfadeFired = false;
+                musicManager.getSendHandler().stopCrossfade();
+            } else {
+                nextTrack();
+            }
         }
     }
 

@@ -40,7 +40,7 @@ public class PlayerManager {
         this.playerManager = new DefaultAudioPlayerManager();
 
         playerManager.getConfiguration()
-                .setOutputFormat(com.sedmelluq.discord.lavaplayer.format.StandardAudioDataFormats.DISCORD_OPUS);
+                .setOutputFormat(com.sedmelluq.discord.lavaplayer.format.StandardAudioDataFormats.DISCORD_PCM_S16_BE);
 
         playerManager.getConfiguration().setResamplingQuality(
                 com.sedmelluq.discord.lavaplayer.player.AudioConfiguration.ResamplingQuality.HIGH);

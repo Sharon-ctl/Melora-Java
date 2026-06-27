@@ -22,6 +22,7 @@ Melora-Java is a high-performance, robust Discord music bot built with Java, JDA
 - `/play <query>`: Start playback of a track or playlist from a URL or search term.
 - `/playinstant <query>`: Instantly play a track, interrupting the current song without adding it to the queue.
 - `/playnext <query>`: Insert a track at the very top of the queue so it plays immediately next.
+- `/playrandom [source]`: Play a random track pulled from your favorites or the bot's global listening history.
 - `/search <query>`: Search for a track and select your choice from an interactive list.
 - `/pause` / `/resume`: Pause or resume the currently active playback.
 - `/skip` / `/previous`: Transition to the next track in the queue, or revert to the previously played track.
@@ -33,10 +34,21 @@ Melora-Java is a high-performance, robust Discord music bot built with Java, JDA
 - `/autoplay`: Toggle the automated recommendation system that queues related tracks when your playlist ends.
 - `/karaoke`: Enable Live Karaoke mode to display synchronized, real-time lyrics in chat.
 - `/filter <filter>`: Apply custom audio digital signal processing (DSP) filters (e.g., bassboost, 8d, vaporwave, nightcore).
-- `/247`: Toggle 24/7 mode, ensuring the bot remains persistently connected to the voice channel.
+- `/crossfade [duration]`: Enable and configure overlapping PCM crossfading between tracks to prevent dead silence during transitions.
+- `/247 [lock]`: Toggle 24/7 mode to keep the bot connected persistently. Use the lock argument to restrict bot dismissal to administrators or DJs.
 
 ### Queue Management
-- `/queue [page] [user]`: Display the current queue. You can optionally filter the results by a specific user or navigate pages.
+- `/queue show [page] [user]`: Display the current queue. You can optionally filter the results by a specific user or navigate pages.
+- `/queue search <query>`: Search for a specific track currently within the queue.
+- `/queue deduplicate`: Scan the queue and remove any duplicate entries automatically.
+- `/queue compact`: Group identical tracks together in the queue sequentially.
+- `/queue reverse`: Invert the current play order of all queued tracks.
+- `/queue sort <criteria>`: Organize the queue alphabetically by track title or track author.
+- `/queue slice <start> <end>`: Remove a contiguous range of tracks from the queue.
+- `/queue shufflefrom <position>`: Shuffle only the tracks that occur after a specific point in the queue.
+- `/queue swap <pos1> <pos2>`: Exchange the positions of two specific tracks in the queue.
+- `/queue export`: Export the current queue into a downloadable JSON file.
+- `/queue import <file>`: Import an existing JSON queue file to append to the active queue.
 - `/nowplaying`: Display detailed metadata and progress regarding the currently playing track.
 - `/shuffle`: Randomize the order of all upcoming tracks in the queue.
 - `/loop <mode>`: Configure the repeat behavior. Modes include `off`, `track` (repeat current song), or `queue` (repeat entire list).

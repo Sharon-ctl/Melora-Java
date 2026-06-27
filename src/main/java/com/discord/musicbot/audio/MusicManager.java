@@ -26,6 +26,7 @@ public class MusicManager {
     private static final long IDLE_TIMEOUT_SECONDS = 180; // 3 minutes
 
     private final AudioPlayer player;
+    private final AudioPlayer secondaryPlayer;
     private final TrackScheduler scheduler;
     private final AudioPlayerSendHandler sendHandler;
     private final FilterManager filterManager;
@@ -85,14 +86,17 @@ public class MusicManager {
     public MusicManager(AudioPlayerManager manager, Guild guild) {
         this.guild = guild;
         this.player = manager.createPlayer();
-        this.scheduler = new TrackScheduler(player, this);
-        this.sendHandler = new AudioPlayerSendHandler(player);
+        this.secondaryPlayer = manager.createPlayer();
+        this.scheduler = new TrackScheduler(player, secondaryPlayer, this);
+        this.sendHandler = new AudioPlayerSendHandler(player, secondaryPlayer);
         this.filterManager = new FilterManager(this);
 
         player.addListener(scheduler);
+        secondaryPlayer.addListener(scheduler);
 
         com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());
         player.setVolume(settings.getDefaultVolume());
+        secondaryPlayer.setVolume(settings.getDefaultVolume());
         this.mode247 = settings.isMode247();
 
         this.tempDjs = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -571,11 +575,16 @@ public class MusicManager {
                 if (mode247) {
                     if (isPlayingOrQueued) {
                         logger.info("Alone timeout reached (24/7 mode) for guild: {}", guild.getName());
-                        sendSimpleEmbed(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
-                                + " Stopped playback and cleared the queue because I was left alone for 3 minutes.");
-                        scheduler.getQueue().clear();
-                        scheduler.stop();
-                        updateVoiceChannelStatus();
+                        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());
+                        if (settings.isMode247Locked()) {
+                            logger.info("Alone timeout reached (24/7 mode) for guild: {} - Session is LOCKED, ignoring.", guild.getName());
+                        } else {
+                            sendSimpleEmbed(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
+                                    + " Stopped playback and cleared the queue because I was left alone for 3 minutes.");
+                            scheduler.getQueue().clear();
+                            scheduler.stop();
+                            updateVoiceChannelStatus();
+                        }
                     } else {
                         logger.info("Alone timeout reached (24/7 mode) for guild: {} - Already stopped, staying quiet.", guild.getName());
                     }

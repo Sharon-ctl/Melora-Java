@@ -11,8 +11,12 @@ public class DisconnectCommand extends SlashCommand {
         return "disconnect";
     }
 
-    @Override
     public void execute(CommandContext ctx) {
+        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(ctx.getGuild().getId());
+        if (settings.isMode247Locked() && !com.discord.musicbot.commands.framework.CommandRegistry.isAuthorizedForLock(ctx)) {
+            ctx.replyError("The 24/7 session is locked. You do not have permission to disconnect me.");
+            return;
+        }
         ctx.getMusicManager().disconnect();
         ctx.replySuccess("Disconnected.");
     }
