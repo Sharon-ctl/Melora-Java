@@ -363,10 +363,14 @@ public class MusicManager {
     }
 
     public void sendNowPlayingMessage() {
-        sendNowPlayingMessage(false);
+        sendNowPlayingMessage(false, null);
     }
 
     public synchronized void sendNowPlayingMessage(boolean forceNew) {
+        sendNowPlayingMessage(forceNew, null);
+    }
+
+    public synchronized void sendNowPlayingMessage(boolean forceNew, com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
         if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId()).isAnnounceTracks()) return;
         
         if (nowPlayingChannelId == null)
@@ -374,7 +378,7 @@ public class MusicManager {
         if (isSendingNowPlaying)
             return; // Prevent concurrent duplicate sends
 
-        AudioTrack track = scheduler.getCurrentTrack();
+        com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride : scheduler.getCurrentTrack();
         if (track == null)
             return;
 
@@ -389,7 +393,7 @@ public class MusicManager {
             return;
 
         final net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel finalChannel = channel;
-        net.dv8tion.jda.api.components.container.Container container = createNowPlayingContainer();
+        net.dv8tion.jda.api.components.container.Container container = createNowPlayingContainer(trackOverride);
         if (container == null)
             return;
 
@@ -479,7 +483,11 @@ public class MusicManager {
     }
 
     public net.dv8tion.jda.api.components.container.Container createNowPlayingContainer() {
-        AudioTrack track = scheduler.getCurrentTrack();
+        return createNowPlayingContainer(null);
+    }
+
+    public net.dv8tion.jda.api.components.container.Container createNowPlayingContainer(com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
+        com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride : scheduler.getCurrentTrack();
         if (track == null)
             return null;
 
