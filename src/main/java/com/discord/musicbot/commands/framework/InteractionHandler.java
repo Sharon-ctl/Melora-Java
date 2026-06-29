@@ -7,7 +7,7 @@ import com.discord.musicbot.data.PlaylistManager;
 import com.discord.musicbot.data.model.PlaylistData;
 import com.discord.musicbot.data.model.PlaylistTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 
@@ -103,8 +103,9 @@ public class InteractionHandler {
         com.discord.musicbot.data.GuildSettingsManager.getInstance().markDirty();
 
         event.deferEdit().queue(v -> {
-            var container = EmbedHelper.createSettingsContainer(settings);
-            event.getHook().editOriginal("").setComponents(container).useComponentsV2().queue();
+            event.getHook().editOriginalEmbeds(EmbedHelper.createSettingsEmbed(settings))
+                    .setComponents(EmbedHelper.createSettingsComponents(settings))
+                    .queue();
         });
     }
 
@@ -204,11 +205,11 @@ public class InteractionHandler {
                 List<PlaylistData> playlists = PlaylistManager.getInstance().getPlaylists(ownerUserId);
                 int maxPages = Math.max(1, (int) Math.ceil(playlists.size() / 10.0));
                 int newPage = calcNewPage(action, currentPage, maxPages);
-                var container = EmbedHelper.createPlaylistListContainer(playlists, newPage);
-                java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
-                comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(EmbedHelper.createPaginationButtons("pllist", newPage, maxPages)));
-                var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
-                event.deferEdit().queue(v -> event.getHook().editOriginal("").setComponents(finalContainer).useComponentsV2().queue());
+                MessageEmbed embed = EmbedHelper.createPlaylistListEmbed(playlists, newPage);
+                event.deferEdit().queue(v -> event.getHook().editOriginalEmbeds(embed).setComponents(
+                        net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                                EmbedHelper.createPaginationButtons("pllist", newPage, maxPages)
+                        )).queue());
             } else if (id.startsWith("pltracks_") && parts.length >= 5) {
                 String playlistId = parts[1];
                 String ownerUserId = parts[2];
@@ -218,11 +219,11 @@ public class InteractionHandler {
                 if (pl == null) { event.reply("Playlist not found.").setEphemeral(true).queue(); return; }
                 int maxPages = Math.max(1, (int) Math.ceil(pl.getTracks().size() / 10.0));
                 int newPage = calcNewPage(action, currentPage, maxPages);
-                var container = EmbedHelper.createPlaylistTracksContainer(pl, newPage);
-                java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
-                comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(EmbedHelper.createPaginationButtons("pltracks_" + playlistId + "_" + ownerUserId, newPage, maxPages)));
-                var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
-                event.deferEdit().queue(v -> event.getHook().editOriginal("").setComponents(finalContainer).useComponentsV2().queue());
+                MessageEmbed embed = EmbedHelper.createPlaylistTracksEmbed(pl, newPage);
+                event.deferEdit().queue(v -> event.getHook().editOriginalEmbeds(embed).setComponents(
+                        net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                                EmbedHelper.createPaginationButtons("pltracks_" + playlistId + "_" + ownerUserId, newPage, maxPages)
+                        )).queue());
             } else if (id.startsWith("favlist_") && parts.length >= 4) {
                 String ownerUserId = parts[1];
                 String action = parts[2];
@@ -230,11 +231,11 @@ public class InteractionHandler {
                 PlaylistData fav = PlaylistManager.getInstance().getFavorites(ownerUserId);
                 int maxPages = Math.max(1, (int) Math.ceil(fav.getTracks().size() / 10.0));
                 int newPage = calcNewPage(action, currentPage, maxPages);
-                var container = EmbedHelper.createPlaylistTracksContainer(fav, newPage);
-                java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
-                comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(EmbedHelper.createPaginationButtons("favlist_" + ownerUserId, newPage, maxPages)));
-                var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
-                event.deferEdit().queue(v -> event.getHook().editOriginal("").setComponents(finalContainer).useComponentsV2().queue());
+                MessageEmbed embed = EmbedHelper.createPlaylistTracksEmbed(fav, newPage);
+                event.deferEdit().queue(v -> event.getHook().editOriginalEmbeds(embed).setComponents(
+                        net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                                EmbedHelper.createPaginationButtons("favlist_" + ownerUserId, newPage, maxPages)
+                        )).queue());
             } else if (id.startsWith("lyrics_") && parts.length == 4) {
                 String action = parts[1];
                 String lyricsId = parts[2];
@@ -246,11 +247,11 @@ public class InteractionHandler {
                 }
                 int maxPages = data.pages.size();
                 int newPage = calcNewPage(action, currentPage, maxPages);
-                var container = EmbedHelper.createLyricsContainer(data.query, data.pages, newPage, data.source, data.isLive);
-                java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
-                comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(EmbedHelper.createLyricsComponents(lyricsId, newPage, maxPages)));
-                var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
-                event.deferEdit().queue(v -> event.getHook().editOriginal("").setComponents(finalContainer).useComponentsV2().queue());
+                MessageEmbed embed = EmbedHelper.createLyricsEmbed(data.query, data.pages, newPage, data.source, data.isLive);
+                event.deferEdit().queue(v -> event.getHook().editOriginalEmbeds(embed).setComponents(
+                        net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                                EmbedHelper.createLyricsComponents(lyricsId, newPage, maxPages)
+                        )).queue());
             } else if (id.startsWith("history_") && parts.length == 3) {
                 String action = parts[1];
                 int currentPage = Integer.parseInt(parts[2]);
@@ -258,11 +259,11 @@ public class InteractionHandler {
                 java.util.List<com.discord.musicbot.data.HistoryManager.HistoryEntry> history = com.discord.musicbot.data.HistoryManager.getInstance().getUserHistory(userId);
                 int maxPages = Math.max(1, (int) Math.ceil(history.size() / 10.0));
                 int newPage = calcNewPage(action, currentPage, maxPages);
-                var container = EmbedHelper.createHistoryContainer(history, newPage);
-                java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
-                comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(EmbedHelper.createPaginationButtons("history", newPage, maxPages)));
-                var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
-                event.deferEdit().queue(v -> event.getHook().editOriginal("").setComponents(finalContainer).useComponentsV2().queue());
+                MessageEmbed embed = EmbedHelper.createHistoryEmbed(history, newPage);
+                event.deferEdit().queue(v -> event.getHook().editOriginalEmbeds(embed).setComponents(
+                        net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                                EmbedHelper.createPaginationButtons("history", newPage, maxPages)
+                        )).queue());
             }
         } catch (NumberFormatException e) {
             event.reply("Invalid pagination data.").setEphemeral(true).queue();
@@ -313,15 +314,16 @@ public class InteractionHandler {
             int maxPages = Math.max(1, (int) Math.ceil(filteredSize / 10.0));
             int newPage = calcNewPage(action, currentPage, maxPages);
     
-            var container = EmbedHelper.createQueueContainer(manager, newPage, filterUserId);
+            MessageEmbed embed = EmbedHelper.createQueueEmbed(manager, newPage, filterUserId);
             final int finalPage = newPage;
             final String finalPrefix = filterUserId == null ? "queue" : "queue_" + filterUserId;
             
             event.deferEdit().queue(v -> {
-                java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
-                comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(EmbedHelper.createPaginationButtons(finalPrefix, finalPage, maxPages)));
-                var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
-                event.getHook().editOriginal("").setComponents(finalContainer).useComponentsV2().queue();
+                event.getHook().editOriginalEmbeds(embed).setComponents(
+                        net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                                EmbedHelper.createPaginationButtons(finalPrefix, finalPage, maxPages)
+                        )
+                ).queue();
             });
         } catch (NumberFormatException e) {
             event.reply("Invalid pagination data.").setEphemeral(true).queue();
@@ -362,9 +364,8 @@ public class InteractionHandler {
                 } else {
                     manager.getScheduler().pause();
                 }
-                event.editMessage("")
-                        .setComponents(manager.createNowPlayingContainer())
-                        .useComponentsV2()
+                event.editMessageEmbeds(manager.createNowPlayingEmbed())
+                        .setComponents(com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(manager))
                         .setAllowedMentions(java.util.Collections.emptyList())
                         .queue();
                 break;
@@ -392,33 +393,30 @@ public class InteractionHandler {
                 break;
             case "np_loop":
                 manager.getScheduler().cycleLoopMode();
-                event.editMessage("")
-                        .setComponents(manager.createNowPlayingContainer())
-                        .useComponentsV2()
+                event.editMessageEmbeds(manager.createNowPlayingEmbed())
+                        .setComponents(com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(manager))
                         .setAllowedMentions(java.util.Collections.emptyList())
                         .queue();
                 break;
             case "np_queue":
-                int maxPages = Math.max(1, (int) Math.ceil(manager.getScheduler().getQueueSize() / 10.0));
-                var container = EmbedHelper.createQueueContainer(manager, 1, null);
-                java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
-                comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(EmbedHelper.createPaginationButtons("queue", 1, maxPages)));
-                var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
-                event.reply("").setComponents(finalContainer).useComponentsV2().setEphemeral(true).queue();
+                event.replyEmbeds(EmbedHelper.createQueueEmbed(manager, 1, null))
+                        .setComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                                EmbedHelper.createPaginationButtons("queue", 1, Math.max(1, (int) Math.ceil(manager.getScheduler().getQueueSize() / 10.0)))
+                        ))
+                        .setEphemeral(true)
+                        .queue();
                 break;
             case "np_voldown":
                 manager.getPlayer().setVolume(Math.max(1, manager.getPlayer().getVolume() - 10));
-                event.editMessage("")
-                        .setComponents(manager.createNowPlayingContainer())
-                        .useComponentsV2()
+                event.editMessageEmbeds(manager.createNowPlayingEmbed())
+                        .setComponents(com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(manager))
                         .setAllowedMentions(java.util.Collections.emptyList())
                         .queue();
                 break;
             case "np_volup":
                 manager.getPlayer().setVolume(Math.min(200, manager.getPlayer().getVolume() + 10));
-                event.editMessage("")
-                        .setComponents(manager.createNowPlayingContainer())
-                        .useComponentsV2()
+                event.editMessageEmbeds(manager.createNowPlayingEmbed())
+                        .setComponents(com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(manager))
                         .setAllowedMentions(java.util.Collections.emptyList())
                         .queue();
                 break;
@@ -469,8 +467,8 @@ public class InteractionHandler {
             if (event.getComponentId().equals("help_menu")) {
                 String category = event.getValues().get(0);
                 String prefix = "/";
-                var container = EmbedHelper.createHelpContainer(category, prefix, event.getJDA());
-                event.editMessage("").setComponents(container).useComponentsV2().queue();
+                MessageEmbed embed = EmbedHelper.createHelpEmbed(category, prefix, event.getJDA());
+                event.editMessageEmbeds(embed).queue();
             } else if (event.getComponentId().startsWith("search_")) {
                 String[] parts = event.getComponentId().split("_", 3);
                 if (parts.length < 3) return;
@@ -501,9 +499,12 @@ public class InteractionHandler {
                 manager.getScheduler().queue(selected);
                 manager.updateNowPlayingMessage();
                 
-                String desc = EmbedHelper.MSG_SUCCESS + " Added **[" + selected.getInfo().title + "](" + selected.getInfo().uri + ")** to the queue.";
-                var container = EmbedHelper.buildContainer(null, desc, null);
-                event.editMessage("").setComponents(container).useComponentsV2().queue();
+                event.editMessageEmbeds(new net.dv8tion.jda.api.EmbedBuilder()
+                    .setColor(new java.awt.Color(EmbedHelper.COLOR_MAIN))
+                    .setDescription(EmbedHelper.MSG_SUCCESS + " Added **[" + EmbedHelper.escapeMarkdown(selected.getInfo().title) + "](" + selected.getInfo().uri + ")** to the queue.")
+                    .build())
+                    .setComponents()
+                    .queue();
             }
         } catch (Exception e) {
             org.slf4j.LoggerFactory.getLogger(InteractionHandler.class).error("Error in handleSelectMenu", e);

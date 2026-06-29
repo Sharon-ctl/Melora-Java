@@ -103,6 +103,9 @@ Melora-Java is a high-performance, robust Discord music bot built with Java, JDA
    # Required
    DISCORD_TOKEN=your_discord_bot_token
 
+   # Customization
+   EMBED_COLOR=#2f3136
+
    YOUTUBE_OAUTH2_TOKEN=can be obtained by turning on the bot and sign in via the command line directly to youtube via google acc with the code shown in the terminal
 
    # Optional (Required for Spotify links)

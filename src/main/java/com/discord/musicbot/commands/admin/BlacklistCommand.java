@@ -5,14 +5,14 @@ import com.discord.musicbot.commands.framework.CommandContext;
 import com.discord.musicbot.commands.framework.SlashCommand;
 import com.discord.musicbot.data.GuildSettingsManager;
 import com.discord.musicbot.data.model.GuildSettings;
-
+import net.dv8tion.jda.api.EmbedBuilder;
 
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 
-
+import java.awt.Color;
 import java.util.List;
 
 public class BlacklistCommand extends SlashCommand {
@@ -63,31 +63,27 @@ public class BlacklistCommand extends SlashCommand {
                 break;
             }
             case "list": {
-                String title = "Server Blacklist";
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setTitle("Server Blacklist");
+                eb.setColor(Color.DARK_GRAY);
 
-                StringBuilder desc = new StringBuilder();
-                int i = 1;
-                
-                desc.append("**Tracks**\n");
                 StringBuilder tb = new StringBuilder();
+                int i = 1;
                 for (String t : settings.getBlacklistTracks()) tb.append(i++).append(". ").append(t).append("\n");
-                if (tb.length() == 0) tb.append("None\n");
-                desc.append(tb).append("\n");
+                if (tb.length() == 0) tb.append("None");
+                eb.addField("Tracks", tb.toString(), false);
 
-                desc.append("**Artists**\n");
                 StringBuilder ab = new StringBuilder();
                 for (String a : settings.getBlacklistArtists()) ab.append(i++).append(". ").append(a).append("\n");
-                if (ab.length() == 0) ab.append("None\n");
-                desc.append(ab).append("\n");
+                if (ab.length() == 0) ab.append("None");
+                eb.addField("Artists", ab.toString(), false);
 
-                desc.append("**Domains**\n");
                 StringBuilder db = new StringBuilder();
                 for (String d : settings.getBlacklistDomains()) db.append(i++).append(". ").append(d).append("\n");
-                if (db.length() == 0) db.append("None\n");
-                desc.append(db);
+                if (db.length() == 0) db.append("None");
+                eb.addField("Domains", db.toString(), false);
 
-                var container = com.discord.musicbot.commands.framework.EmbedHelper.buildContainer(title, desc.toString(), null);
-                ctx.getEvent().reply("").setComponents(container).useComponentsV2().queue();
+                ctx.getEvent().replyEmbeds(eb.build()).queue();
                 break;
             }
             case "remove": {

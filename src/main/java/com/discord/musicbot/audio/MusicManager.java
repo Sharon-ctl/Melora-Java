@@ -393,8 +393,8 @@ public class MusicManager {
             return;
 
         final net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel finalChannel = channel;
-        net.dv8tion.jda.api.components.container.Container container = createNowPlayingContainer(trackOverride);
-        if (container == null)
+        net.dv8tion.jda.api.entities.MessageEmbed embed = createNowPlayingEmbed(trackOverride);
+        if (embed == null)
             return;
 
         isSendingNowPlaying = true;
@@ -414,18 +414,18 @@ public class MusicManager {
                 finalChannel.getHistory().retrievePast(10).queue(messages -> {
                     try {
                         for (net.dv8tion.jda.api.entities.Message msg : messages) {
-                            if (msg.getAuthor().equals(guild.getJDA().getSelfUser()) && msg.getFlags().contains(net.dv8tion.jda.api.entities.Message.MessageFlag.IS_COMPONENTS_V2)) {
+                            if (msg.getAuthor().equals(guild.getJDA().getSelfUser()) && !msg.getEmbeds().isEmpty()) {
                                 nowPlayingMessageId = msg.getId();
                                 break;
                             }
                         }
-                        finalizeNowPlayingMessage(finalChannel, container);
+                        finalizeNowPlayingMessage(finalChannel, embed);
                     } catch (Exception ex) {
                         isSendingNowPlaying = false;
                     }
                 }, e -> {
                     try {
-                        finalizeNowPlayingMessage(finalChannel, container);
+                        finalizeNowPlayingMessage(finalChannel, embed);
                     } catch (Exception ex) {
                         isSendingNowPlaying = false;
                     }
@@ -437,28 +437,27 @@ public class MusicManager {
         }
 
         try {
-            finalizeNowPlayingMessage(finalChannel, container);
+            finalizeNowPlayingMessage(finalChannel, embed);
         } catch (Exception e) {
             isSendingNowPlaying = false;
         }
     }
 
     private void finalizeNowPlayingMessage(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel channel,
-            net.dv8tion.jda.api.components.container.Container container) {
+            net.dv8tion.jda.api.entities.MessageEmbed embed) {
         try {
             if (nowPlayingMessageId != null) {
                 channel.editMessageById(nowPlayingMessageId, "")
                         .setReplace(true)
-                        .setComponents(container)
+                        .setEmbeds(embed)
+                        .setComponents(com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(this))
                         .setAllowedMentions(java.util.Collections.emptyList())
-                        .useComponentsV2()
                         .queue(success -> isSendingNowPlaying = false, e -> {
                             nowPlayingMessageId = null;
                             try {
-                                channel.sendMessage("")
-                                        .setComponents(container)
+                                channel.sendMessageEmbeds(embed)
+                                        .setComponents(com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(this))
                                         .setAllowedMentions(java.util.Collections.emptyList())
-                                        .useComponentsV2()
                                         .queue(msg -> {
                                             nowPlayingMessageId = msg.getId();
                                             isSendingNowPlaying = false;
@@ -468,8 +467,8 @@ public class MusicManager {
                             }
                         });
             } else {
-                channel.sendMessage("")
-                        .setComponents(container)
+                channel.sendMessageEmbeds(embed)
+                        .setComponents(com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(this))
                         .setAllowedMentions(java.util.Collections.emptyList())
                         .queue(msg -> {
                             nowPlayingMessageId = msg.getId();
@@ -481,11 +480,11 @@ public class MusicManager {
         }
     }
 
-    public net.dv8tion.jda.api.components.container.Container createNowPlayingContainer() {
-        return createNowPlayingContainer(null);
+    public net.dv8tion.jda.api.entities.MessageEmbed createNowPlayingEmbed() {
+        return createNowPlayingEmbed(null);
     }
 
-    public net.dv8tion.jda.api.components.container.Container createNowPlayingContainer(com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
+    public net.dv8tion.jda.api.entities.MessageEmbed createNowPlayingEmbed(com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
         com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride : scheduler.getCurrentTrack();
         if (track == null)
             return null;
@@ -544,21 +543,15 @@ public class MusicManager {
         }
         footer.append(String.format(" | Queue: %d tracks", scheduler.getQueue().size()));
         
-        java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> containerComponents = new java.util.ArrayList<>();
-        
-        containerComponents.add(
-            net.dv8tion.jda.api.components.section.Section.of(
-                net.dv8tion.jda.api.components.thumbnail.Thumbnail.fromUrl(getArtworkUrl(track)),
-                net.dv8tion.jda.api.components.textdisplay.TextDisplay.of("### " + authorName + " | " + status),
-                net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(desc),
-                net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(footer.toString())
-            )
-        );
-        
-        containerComponents.addAll(com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(this));
+        net.dv8tion.jda.api.EmbedBuilder eb = new net.dv8tion.jda.api.EmbedBuilder();
+        eb.setAuthor(authorName + " | " + status, null, guild.getJDA().getSelfUser().getAvatarUrl());
+        eb.setTitle(title, track.getInfo().uri);
+        eb.setDescription(desc);
+        eb.setThumbnail(getArtworkUrl(track));
+        eb.setFooter(footer.toString());
+        eb.setColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN);
 
-        return net.dv8tion.jda.api.components.container.Container.of(containerComponents)
-                .withAccentColor(new java.awt.Color(0x2f3136));
+        return eb.build();
     }
 
     // --- Alone Mode Logic ---
@@ -637,8 +630,11 @@ public class MusicManager {
             net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = guild.getChannelById(
                     net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, nowPlayingChannelId);
             if (ch != null) {
-                var container = com.discord.musicbot.commands.framework.EmbedHelper.buildContainer(null, message, null);
-                ch.sendMessage("").setComponents(container).useComponentsV2().queue();
+                var embed = new net.dv8tion.jda.api.EmbedBuilder()
+                        .setColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN)
+                        .setDescription(message)
+                        .build();
+                ch.sendMessageEmbeds(embed).queue();
             }
         } catch (Exception e) {
             logger.debug("Failed to send simple embed", e);

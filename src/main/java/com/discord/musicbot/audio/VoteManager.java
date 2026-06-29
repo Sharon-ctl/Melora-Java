@@ -136,8 +136,8 @@ public class VoteManager {
             return;
         }
 
-        var container = EmbedHelper.createVoteContainer(vote.type.name(), vote.yesVotes.size(), required);
-        event.editMessage("").setComponents(container).useComponentsV2().queue();
+        var embed = EmbedHelper.createVoteEmbed(vote.type.name(), vote.yesVotes.size(), required);
+        event.getChannel().editMessageEmbedsById(vote.messageId, embed).queue();
     }
 
     private int getThresholdForType(Guild guild, VoteType type) {

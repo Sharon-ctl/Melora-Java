@@ -5,7 +5,9 @@ import com.discord.musicbot.data.model.PlaylistData;
 import com.discord.musicbot.data.model.PlaylistTrack;
 import com.discord.musicbot.data.model.GuildSettings;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.emoji.Emoji;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 
@@ -32,7 +34,26 @@ public class EmbedHelper {
     public static final String MSG_SHUFFLE = com.discord.musicbot.config.EmojiConfig.getInstance().shuffle;
     public static final String MSG_REPEAT = com.discord.musicbot.config.EmojiConfig.getInstance().repeat;
 
-    public static final int COLOR_MAIN = 0x2f3136;
+    public static final int COLOR_MAIN;
+
+    static {
+        int color = 0x2f3136;
+        try {
+            io.github.cdimascio.dotenv.Dotenv dotenv = io.github.cdimascio.dotenv.Dotenv.load();
+            String envColor = dotenv.get("EMBED_COLOR");
+            if (envColor != null && !envColor.isEmpty()) {
+                if (envColor.startsWith("#")) {
+                    envColor = envColor.substring(1);
+                } else if (envColor.startsWith("0x")) {
+                    envColor = envColor.substring(2);
+                }
+                color = Integer.parseInt(envColor, 16);
+            }
+        } catch (Exception e) {
+            // Ignore and use default
+        }
+        COLOR_MAIN = color;
+    }
 
     public static String escapeMarkdown(String text) {
         return text.replaceAll("([*_`~>|])", "\\\\$1");
@@ -75,27 +96,11 @@ public class EmbedHelper {
         return sb.toString();
     }
 
-    public static net.dv8tion.jda.api.components.container.Container buildContainer(String title, String description, String footer) {
-        java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> components = new java.util.ArrayList<>();
-        java.util.List<net.dv8tion.jda.api.components.textdisplay.TextDisplay> texts = new java.util.ArrayList<>();
-        if (title != null && !title.isEmpty()) {
-            texts.add(net.dv8tion.jda.api.components.textdisplay.TextDisplay.of("### " + title));
-        }
-        if (description != null && !description.isEmpty()) {
-            texts.add(net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(description));
-        }
-        if (footer != null && !footer.isEmpty()) {
-            texts.add(net.dv8tion.jda.api.components.textdisplay.TextDisplay.of("*" + footer + "*"));
-        }
-        
-        if (!texts.isEmpty()) {
-            components.addAll(texts);
-        }
-        return net.dv8tion.jda.api.components.container.Container.of(components);
-    }
-
-    public static net.dv8tion.jda.api.components.container.Container createQueueContainer(MusicManager manager, int page, String filterUserId) {
-        String title = filterUserId != null ? "Queue (Filtered)" : "Queue";
+    public static MessageEmbed createQueueEmbed(MusicManager manager, int page, String filterUserId) {
+        EmbedBuilder embed = new EmbedBuilder();
+        embed.setColor(COLOR_MAIN);
+        embed.setTitle(filterUserId != null ? "Queue (Filtered)" : "Queue");
+        embed.setTimestamp(java.time.Instant.now());
 
         List<AudioTrack> queue = new ArrayList<>(manager.getScheduler().getQueue());
         if (filterUserId != null) {
@@ -132,6 +137,8 @@ public class EmbedHelper {
         if (manager.getScheduler().getAutoplay())
             footer.append(" | Autoplay");
 
+        embed.setFooter(footer.toString());
+
         StringBuilder description = new StringBuilder();
 
         if (queueSize > 0) {
@@ -140,18 +147,18 @@ public class EmbedHelper {
 
             for (int i = start; i < end; i++) {
                 AudioTrack track = queue.get(i);
-                String trackTitle = track.getInfo().title;
-                if (trackTitle.length() > 30) {
-                    trackTitle = trackTitle.substring(0, 27) + "...";
+                String title = track.getInfo().title;
+                if (title.length() > 30) {
+                    title = title.substring(0, 27) + "...";
                 }
                 
                 String url = track.getInfo().uri;
                 if (url == null) {
-                    url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(trackTitle, java.nio.charset.StandardCharsets.UTF_8);
+                    url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(title, java.nio.charset.StandardCharsets.UTF_8);
                 } else if (url.startsWith("ytsearch:")) {
                     url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(url.substring(9), java.nio.charset.StandardCharsets.UTF_8);
                 }
-                trackTitle = escapeMarkdown(trackTitle);
+                title = escapeMarkdown(title);
                 
                 String requester = "";
                 Object ud = track.getUserData();
@@ -166,13 +173,14 @@ public class EmbedHelper {
                     }
                 }
                 
-                description.append(String.format("%d. [**%s**](%s)%s\n", i + 1, trackTitle, url, requester));
+                description.append(String.format("%d. [**%s**](%s)%s\n", i + 1, title, url, requester));
             }
         } else {
             description.append("No tracks in queue");
         }
 
-        return buildContainer(title, description.toString(), footer.toString());
+        embed.setDescription(description.toString());
+        return embed.build();
     }
 
     public static List<Button> createPaginationButtons(String idPrefix, int page, int maxPages) {
@@ -184,18 +192,25 @@ public class EmbedHelper {
         return buttons;
     }
 
-    public static net.dv8tion.jda.api.components.container.Container createLyricsContainer(String query, List<String> pages, int pageNum, String source, boolean isLive) {
-        String title = "Lyrics: " + query;
-        String footer = String.format("Page %d/%d | Source: %s", pageNum, pages.size(), source);
-        String description = pages.get(pageNum - 1);
-        return buildContainer(title, description, footer);
+    public static MessageEmbed createLyricsEmbed(String query, List<String> pages, int pageNum, String source, boolean isLive) {
+        EmbedBuilder embed = new EmbedBuilder();
+        embed.setColor(COLOR_MAIN);
+        embed.setTitle("Lyrics: " + query);
+        embed.setTimestamp(java.time.Instant.now());
+        embed.setFooter(String.format("Page %d/%d | Source: %s", pageNum, pages.size(), source));
+        
+        String text = pages.get(pageNum - 1);
+        embed.setDescription(text);
+        return embed.build();
     }
 
-    public static net.dv8tion.jda.api.components.container.Container createVoteContainer(String type, int currentYes, int required) {
-        String title = "Vote to " + type;
-        String description = String.format("Votes: **%d** / **%d** required", currentYes, required);
-        String footer = "Vote passes when requirements are met.";
-        return buildContainer(title, description, footer);
+    public static MessageEmbed createVoteEmbed(String type, int currentYes, int required) {
+        EmbedBuilder eb = new EmbedBuilder();
+        eb.setColor(COLOR_MAIN);
+        eb.setTitle("Vote to " + type);
+        eb.setDescription(String.format("Votes: **%d** / **%d** required", currentYes, required));
+        eb.setFooter("Vote passes when requirements are met.");
+        return eb.build();
     }
 
     public static List<Button> createLyricsComponents(String lyricsId, int page, int maxPages) {
@@ -206,20 +221,21 @@ public class EmbedHelper {
     }
 
 
-    public static net.dv8tion.jda.api.components.container.Container createHelpContainer(String category, String prefix, JDA jda) {
-        String title = "Music Commands";
-        String footer = "Slash Commands Supported";
+    public static MessageEmbed createHelpEmbed(String category, String prefix, JDA jda) {
+        EmbedBuilder embed = new EmbedBuilder()
+                .setColor(COLOR_MAIN)
+                .setTitle("Music Commands")
+                .setTimestamp(java.time.Instant.now())
+                .setFooter("Slash Commands Supported");
 
         if (category.equals("home")) {
-            // No easy way to set thumbnail in buildContainer unless we modify buildContainer. 
-            // We can just skip the thumbnail or add it if we upgrade buildContainer.
-            // For now, we will just use the text.
+            embed.setThumbnail("https://cdn.discordapp.com/attachments/1438305127898550342/1519635008686391435/mewsic.png?ex=6a3e45e3&is=6a3cf463&hm=3b6da7f8e57917e7acd32b900182cb31cded451961c3c114c08e9ceadcb5e185&");
         }
 
         StringBuilder description = new StringBuilder();
 
         if (category.equals("home")) {
-            title = jda.getSelfUser().getName() + " Music";
+            embed.setTitle(jda.getSelfUser().getName() + " Music");
             description.append("A simple music bot supporting **Spotify**, **YouTube**, and **SoundCloud**.\n\n");
             description.append("**").append(com.discord.musicbot.config.EmojiConfig.getInstance().mewsic).append(" Official Mewsic Collaboration**\n");
             description.append("This bot is integrated with the offline Mewsic app. You can play your Mewsic playlists seamlessly using `/mewsic play` and `/mewsic import`.\n\n");
@@ -296,13 +312,19 @@ public class EmbedHelper {
             description.append(String.format("**%sping** - Check bot latency.\n", prefix));
         } else {
             description.append("Command not found. Use `" + prefix + "help` to see all commands.");
+            embed.setColor(java.awt.Color.RED);
         }
 
-        return buildContainer(title, description.toString(), footer);
+        embed.setDescription(description.toString());
+        return embed.build();
     }
 
-    public static net.dv8tion.jda.api.components.container.Container createCommandHelpContainer(String commandName, String prefix, JDA jda) {
-        String title = "Command: " + commandName;
+    public static MessageEmbed createCommandHelpEmbed(String commandName, String prefix, JDA jda) {
+        EmbedBuilder embed = new EmbedBuilder()
+                .setColor(COLOR_MAIN)
+                .setTitle("Command: " + commandName)
+                .setTimestamp(java.time.Instant.now());
+
         String description;
         switch (commandName) {
             case "play": description = "Play a song or add it to the queue.\n\n**Usage:** `" + prefix + "play <song/url>`"; break;
@@ -385,10 +407,11 @@ public class EmbedHelper {
             case "grab": description = "Send the currently playing track to your Direct Messages.\n\n**Usage:** `" + prefix + "grab`"; break;
             case "filter": description = "Apply an audio filter to the playback.\n\n**Filters:** `bassboost`, `earrape`, `pop`, `rock`, `electronic`, `nightcore`, `vaporwave`, `8d`, `tremolo`, `vibrato`, `distortion`, `muffled`, `vocal_remove`, `mono`, `clear`\n\n**Usage:** `" + prefix + "filter <filter>`"; break;
             case "settings": description = "Open the server configuration dashboard to toggle bot behaviors (Admin only).\n\n**Usage:** `" + prefix + "settings`"; break;
-            default: description = "Command not found. Use `" + prefix + "help` to see all commands."; break;
+            default: description = "Command not found. Use `" + prefix + "help` to see all commands."; embed.setColor(java.awt.Color.RED); break;
         }
 
-        return buildContainer(title, description, null);
+        embed.setDescription(description);
+        return embed.build();
     }
 
     public static ActionRow createHelpMenu() {
@@ -428,14 +451,16 @@ public class EmbedHelper {
 
     // ======================== PLAYLIST / FAVORITES / HISTORY EMBEDS ========================
 
-    public static net.dv8tion.jda.api.components.container.Container createHistoryContainer(java.util.List<com.discord.musicbot.data.HistoryManager.HistoryEntry> history, int page) {
-        String title = "Your Listening History";
+    public static MessageEmbed createHistoryEmbed(java.util.List<com.discord.musicbot.data.HistoryManager.HistoryEntry> history, int page) {
+        EmbedBuilder embed = new EmbedBuilder();
+        embed.setColor(COLOR_MAIN);
+        embed.setTitle("Your Listening History");
 
         int totalTracks = history.size();
         int maxPages = Math.max(1, (int) Math.ceil(totalTracks / 10.0));
         page = Math.max(1, Math.min(page, maxPages));
 
-        String footer = "Page " + page + "/" + maxPages + " | " + totalTracks + " track" + (totalTracks != 1 ? "s" : "");
+        embed.setFooter("Page " + page + "/" + maxPages + " | " + totalTracks + " track" + (totalTracks != 1 ? "s" : ""));
 
         StringBuilder description = new StringBuilder();
         if (totalTracks > 0) {
@@ -443,25 +468,28 @@ public class EmbedHelper {
             int end = Math.min(start + 10, totalTracks);
             for (int i = start; i < end; i++) {
                 com.discord.musicbot.data.HistoryManager.HistoryEntry t = history.get(i);
-                String trackTitle = t.title;
-                if (trackTitle.length() > 50) trackTitle = trackTitle.substring(0, 47) + "...";
+                String title = t.title;
+                if (title.length() > 50) title = title.substring(0, 47) + "...";
                 
                 String url = t.uri;
                 if (url != null && url.startsWith("ytsearch:")) {
                     url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(url.substring(9), java.nio.charset.StandardCharsets.UTF_8);
                 }
                 
-                description.append(String.format("`%d.` [**%s**](%s)\n", i + 1, escapeMarkdown(trackTitle), url));
+                description.append(String.format("`%d.` [**%s**](%s)\n", i + 1, escapeMarkdown(title), url));
             }
         } else {
             description.append("No listening history.");
         }
 
-        return buildContainer(title, description.toString(), footer);
+        embed.setDescription(description.toString());
+        return embed.build();
     }
 
-    public static net.dv8tion.jda.api.components.container.Container createPlaylistTracksContainer(PlaylistData playlist, int page) {
-        String title = playlist.isFavorites() ? "Favorites" : playlist.getName();
+    public static MessageEmbed createPlaylistTracksEmbed(PlaylistData playlist, int page) {
+        EmbedBuilder embed = new EmbedBuilder();
+        embed.setColor(COLOR_MAIN);
+        embed.setTitle(playlist.isFavorites() ? "Favorites" : playlist.getName());
 
         List<PlaylistTrack> tracks = playlist.getTracks();
         int totalTracks = tracks.size();
@@ -474,6 +502,7 @@ public class EmbedHelper {
             footer.append(" | ").append(totalTracks).append(" track").append(totalTracks != 1 ? "s" : "");
             footer.append(" | ").append(formatDuration(playlist.getTotalDuration())).append(" total");
         }
+        embed.setFooter(footer.toString());
 
         StringBuilder description = new StringBuilder();
         if (totalTracks > 0) {
@@ -482,26 +511,29 @@ public class EmbedHelper {
             int end = Math.min(start + 10, totalTracks);
             for (int i = start; i < end; i++) {
                 PlaylistTrack t = tracks.get(i);
-                String trackTitle = t.getTitle();
-                if (trackTitle.length() > 50) trackTitle = trackTitle.substring(0, 47) + "...";
-                description.append(String.format("%d. %s [%s]\n", i + 1, trackTitle, formatDuration(t.getDuration())));
+                String title = t.getTitle();
+                if (title.length() > 50) title = title.substring(0, 47) + "...";
+                description.append(String.format("%d. %s [%s]\n", i + 1, title, formatDuration(t.getDuration())));
             }
             description.append("```");
         } else {
             description.append("No tracks");
         }
 
-        return buildContainer(title, description.toString(), footer.toString());
+        embed.setDescription(description.toString());
+        return embed.build();
     }
 
-    public static net.dv8tion.jda.api.components.container.Container createPlaylistListContainer(List<PlaylistData> playlists, int page) {
-        String title = "Your Playlists";
+    public static MessageEmbed createPlaylistListEmbed(List<PlaylistData> playlists, int page) {
+        EmbedBuilder embed = new EmbedBuilder();
+        embed.setColor(COLOR_MAIN);
+        embed.setTitle("Your Playlists");
 
         int total = playlists.size();
         int maxPages = Math.max(1, (int) Math.ceil(total / 10.0));
         page = Math.max(1, Math.min(page, maxPages));
 
-        String footer = "Page " + page + "/" + maxPages + " | " + total + " playlist" + (total != 1 ? "s" : "");
+        embed.setFooter("Page " + page + "/" + maxPages + " | " + total + " playlist" + (total != 1 ? "s" : ""));
 
         StringBuilder description = new StringBuilder();
         if (total > 0) {
@@ -519,11 +551,14 @@ public class EmbedHelper {
             description.append("No playlists. Use `/playlist create` to get started!");
         }
 
-        return buildContainer(title, description.toString(), footer);
+        embed.setDescription(description.toString());
+        return embed.build();
     }
 
-    public static net.dv8tion.jda.api.components.container.Container createPlaylistInfoContainer(PlaylistData playlist) {
-        String title = playlist.isFavorites() ? "Favorites Info" : playlist.getName();
+    public static MessageEmbed createPlaylistInfoEmbed(PlaylistData playlist) {
+        EmbedBuilder embed = new EmbedBuilder();
+        embed.setColor(COLOR_MAIN);
+        embed.setTitle(playlist.isFavorites() ? "Favorites Info" : playlist.getName());
 
         StringBuilder desc = new StringBuilder();
         if (!playlist.isFavorites()) {
@@ -534,7 +569,8 @@ public class EmbedHelper {
         desc.append("**Created:** <t:").append(playlist.getCreatedAt() / 1000).append(":R>\n");
         desc.append("**Updated:** <t:").append(playlist.getUpdatedAt() / 1000).append(":R>");
 
-        return buildContainer(title, desc.toString(), null);
+        embed.setDescription(desc.toString());
+        return embed.build();
     }
 
     public static List<String> splitLyrics(String lyrics) {
@@ -568,26 +604,27 @@ public class EmbedHelper {
         return pages;
     }
 
-    public static net.dv8tion.jda.api.components.container.Container createSettingsContainer(GuildSettings settings) {
-        String title = com.discord.musicbot.config.EmojiConfig.getInstance().settings + " Server Settings";
-        StringBuilder desc = new StringBuilder();
-        desc.append("Manage bot configurations for this server. Use the buttons below to toggle features.\n\n");
+    public static MessageEmbed createSettingsEmbed(GuildSettings settings) {
+        EmbedBuilder embed = new EmbedBuilder();
+        embed.setColor(COLOR_MAIN);
+        embed.setTitle(com.discord.musicbot.config.EmojiConfig.getInstance().settings + " Server Settings");
+        embed.setDescription("Manage bot configurations for this server. Use the buttons below to toggle features.");
 
         String enabledEmoji = com.discord.musicbot.config.EmojiConfig.getInstance().enabled + " Enabled";
         String disabledEmoji = com.discord.musicbot.config.EmojiConfig.getInstance().disabled + " Disabled";
 
-        desc.append("**Voice Channel Status:** ").append(settings.isUpdateVcStatus() ? enabledEmoji : disabledEmoji).append("\n");
-        desc.append("**Announce Tracks:** ").append(settings.isAnnounceTracks() ? enabledEmoji : disabledEmoji).append("\n");
-        desc.append("**Default Volume:** ").append(settings.getDefaultVolume()).append("%\n");
+        embed.addField("Voice Channel Status", settings.isUpdateVcStatus() ? enabledEmoji : disabledEmoji, true);
+        embed.addField("Announce Tracks", settings.isAnnounceTracks() ? enabledEmoji : disabledEmoji, true);
+        embed.addField("Default Volume", settings.getDefaultVolume() + "%", true);
         
-        desc.append("**24/7 Mode:** ").append(settings.isMode247() ? enabledEmoji : disabledEmoji).append("\n");
-        desc.append("**Autoplay:** ").append(settings.isAutoplay() ? enabledEmoji : disabledEmoji).append("\n");
-        desc.append("**DJ Mode:** ").append(settings.isDjMode() ? enabledEmoji : disabledEmoji).append("\n");
+        embed.addField("24/7 Mode", settings.isMode247() ? enabledEmoji : disabledEmoji, true);
+        embed.addField("Autoplay", settings.isAutoplay() ? enabledEmoji : disabledEmoji, true);
+        embed.addField("DJ Mode", settings.isDjMode() ? enabledEmoji : disabledEmoji, true);
         
         String channel = settings.getCommandChannelId() != null ? "<#" + settings.getCommandChannelId() + ">" : "Any";
-        desc.append("**Command Channel:** ").append(channel);
+        embed.addField("Command Channel", channel, true);
 
-        return buildContainer(title, desc.toString(), null);
+        return embed.build();
     }
 
     public static List<ActionRow> createSettingsComponents(GuildSettings settings) {

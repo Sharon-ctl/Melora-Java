@@ -7,13 +7,13 @@ import com.discord.musicbot.data.SavedQueueManager;
 import com.discord.musicbot.data.model.PlaylistTrack;
 import com.discord.musicbot.data.model.SavedQueue;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 
-
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -107,15 +107,17 @@ public class SavedQueueCommand extends SlashCommand {
                     ctx.replyError("You have no saved queues.");
                     return;
                 }
-                String title = "Your Saved Queues";
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setTitle("Your Saved Queues");
+                eb.setColor(Color.DARK_GRAY);
                 StringBuilder sb = new StringBuilder();
                 int i = 1;
                 for (SavedQueue sq : queues) {
                     sb.append("`").append(i++).append(".` **").append(sq.getName()).append("** (")
                       .append(sq.getTracks().size()).append(" tracks)\n");
                 }
-                var container = com.discord.musicbot.commands.framework.EmbedHelper.buildContainer(title, sb.toString(), null);
-                ctx.getEvent().reply("").setComponents(container).useComponentsV2().queue();
+                eb.setDescription(sb.toString());
+                ctx.getEvent().replyEmbeds(eb.build()).queue();
                 break;
             }
             default:

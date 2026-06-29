@@ -13,7 +13,7 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.utils.FileUpload;
-
+import net.dv8tion.jda.api.EmbedBuilder;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -51,7 +51,7 @@ public class QueueCommand extends SlashCommand {
         var userOpt = ctx.getOption("user");
         String filterUserId = userOpt != null ? userOpt.getAsString() : null;
         
-        var container = EmbedHelper.createQueueContainer(ctx.getMusicManager(), page, filterUserId);
+        var embed = EmbedHelper.createQueueEmbed(ctx.getMusicManager(), page, filterUserId);
         
         long filteredSize = filterUserId == null ? ctx.getScheduler().getQueueSize() : 
             ctx.getScheduler().getQueue().stream().filter(t -> {
@@ -68,19 +68,16 @@ public class QueueCommand extends SlashCommand {
         int maxPages = Math.max(1, (int) Math.ceil(filteredSize / 10.0));
         String prefix = filterUserId == null ? "queue" : "queue_" + filterUserId;
         var components = EmbedHelper.createPaginationButtons(prefix, page, maxPages);
-        
-        java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
-        comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(components));
-        net.dv8tion.jda.api.components.container.Container finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
-        
-        ctx.getEvent().reply("").setComponents(finalContainer).useComponentsV2().queue();
+        ctx.getEvent().replyEmbeds(embed).setComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(components)).queue();
     }
 
     private void handleSearch(CommandContext ctx) {
         String query = ctx.getOption("query").getAsString().toLowerCase();
         List<AudioTrack> queue = ctx.getScheduler().getQueue();
         
-        String title = "Search Results in Queue";
+        EmbedBuilder eb = new EmbedBuilder();
+        eb.setTitle("Search Results in Queue");
+        eb.setColor(EmbedHelper.COLOR_MAIN);
         
         StringBuilder sb = new StringBuilder();
         int count = 0;
@@ -93,15 +90,13 @@ public class QueueCommand extends SlashCommand {
             }
         }
         
-        String description;
-        if (count == 0) description = "No tracks matched your query.";
+        if (count == 0) eb.setDescription("No tracks matched your query.");
         else {
             if (count >= 15) sb.append("*...and more*");
-            description = sb.toString();
+            eb.setDescription(sb.toString());
         }
         
-        var container = EmbedHelper.buildContainer(title, description, null);
-        ctx.getEvent().reply("").setComponents(container).useComponentsV2().queue();
+        ctx.getEvent().replyEmbeds(eb.build()).queue();
     }
 
     private void handleDeduplicate(CommandContext ctx) {
@@ -139,7 +134,9 @@ public class QueueCommand extends SlashCommand {
             return;
         }
         
-        String title = "Queue Slice (" + start + " to " + end + ")";
+        EmbedBuilder eb = new EmbedBuilder();
+        eb.setTitle("Queue Slice (" + start + " to " + end + ")");
+        eb.setColor(EmbedHelper.COLOR_MAIN);
         
         StringBuilder sb = new StringBuilder();
         for (int i = start - 1; i < Math.min(end, start + 14); i++) {
@@ -148,8 +145,8 @@ public class QueueCommand extends SlashCommand {
         }
         if (end - start > 14) sb.append("*...and more*");
         
-        var container = EmbedHelper.buildContainer(title, sb.toString(), null);
-        ctx.getEvent().reply("").setComponents(container).useComponentsV2().queue();
+        eb.setDescription(sb.toString());
+        ctx.getEvent().replyEmbeds(eb.build()).queue();
     }
 
     private void handleShuffleFrom(CommandContext ctx) {

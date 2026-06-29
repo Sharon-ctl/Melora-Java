@@ -1,7 +1,7 @@
 package com.discord.musicbot.commands.admin;
 
 import com.discord.musicbot.commands.framework.CommandContext;
-
+import com.discord.musicbot.commands.framework.EmbedHelper;
 import com.discord.musicbot.commands.framework.SlashCommand;
 import com.discord.musicbot.data.GuildSettingsManager;
 import com.discord.musicbot.data.model.GuildSettings;
@@ -39,10 +39,9 @@ public class SettingsCommand extends SlashCommand {
 
         GuildSettings settings = GuildSettingsManager.getInstance().getSettings(ctx.getEvent().getGuild().getId());
 
-        var container = com.discord.musicbot.commands.framework.EmbedHelper.createSettingsContainer(settings);
-        java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
-        comps.addAll(com.discord.musicbot.commands.framework.EmbedHelper.createSettingsComponents(settings));
-        var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
-        ctx.getEvent().reply("").setComponents(finalContainer).useComponentsV2().setEphemeral(true).queue();
+        ctx.getEvent().replyEmbeds(EmbedHelper.createSettingsEmbed(settings))
+                .setComponents(EmbedHelper.createSettingsComponents(settings))
+                .setEphemeral(true)
+                .queue();
     }
 }

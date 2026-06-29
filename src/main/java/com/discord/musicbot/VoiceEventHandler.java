@@ -51,8 +51,11 @@ public class VoiceEventHandler extends ListenerAdapter {
                     net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel tc = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, manager.getNowPlayingChannelId());
                     if (tc != null) {
                         String desc = "☹️ I was forcefully disconnected! My queue has been cleared.";
-                        var container = com.discord.musicbot.commands.framework.EmbedHelper.buildContainer(null, desc, null);
-                        tc.sendMessage("").setComponents(container).useComponentsV2().queue(null, new net.dv8tion.jda.api.exceptions.ErrorHandler().ignore(net.dv8tion.jda.api.exceptions.ErrorResponseException.class));
+                        var embed = new net.dv8tion.jda.api.EmbedBuilder()
+                            .setColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN)
+                            .setDescription(desc)
+                            .build();
+                        tc.sendMessageEmbeds(embed).queue(null, new net.dv8tion.jda.api.exceptions.ErrorHandler().ignore(net.dv8tion.jda.api.exceptions.ErrorResponseException.class));
                     }
                 }
                 
