@@ -14,13 +14,17 @@ public class HelpCommand extends SlashCommand {
     @Override
     public void execute(CommandContext ctx) {
         var commandOpt = ctx.getOption("command");
+        
         if (commandOpt != null) {
             String commandName = commandOpt.getAsString().toLowerCase();
-            var embed = com.discord.musicbot.commands.framework.EmbedHelper.createCommandHelpEmbed(commandName, "/", ctx.getEvent().getJDA());
-            ctx.getEvent().replyEmbeds(embed).queue();
+            var container = com.discord.musicbot.commands.framework.EmbedHelper.createCommandHelpContainer(commandName, "/", ctx.getEvent().getJDA());
+            ctx.getEvent().replyComponents(container).useComponentsV2().queue();
         } else {
-            var embed = com.discord.musicbot.commands.framework.EmbedHelper.createHelpEmbed("home", "/", ctx.getEvent().getJDA());
-            ctx.getEvent().replyEmbeds(embed).setComponents(com.discord.musicbot.commands.framework.EmbedHelper.createHelpMenu()).queue();
+            var container = com.discord.musicbot.commands.framework.EmbedHelper.createHelpContainer("home", "/", ctx.getEvent().getJDA());
+            java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
+            comps.add(com.discord.musicbot.commands.framework.EmbedHelper.createHelpMenu());
+            var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
+            ctx.getEvent().replyComponents(finalContainer).useComponentsV2().queue();
         }
     }
 

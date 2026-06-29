@@ -42,6 +42,7 @@ public class TrackScheduler extends AudioEventAdapter {
     private volatile boolean autoplay = false;
     private volatile boolean primaryIsActive = true;
     private volatile boolean crossfadeFired = false;
+    private final java.util.concurrent.ScheduledFuture<?> crossfadeTask;
 
     public TrackScheduler(AudioPlayer player, AudioPlayer secondaryPlayer, MusicManager musicManager) {
         this.player = player;
@@ -51,7 +52,7 @@ public class TrackScheduler extends AudioEventAdapter {
         this.history = new LinkedBlockingDeque<>();
         this.playbackGeneration = new AtomicInteger(0);
 
-        PlayerManager.scheduledExecutor.scheduleAtFixedRate(this::checkCrossfade, 1, 1, java.util.concurrent.TimeUnit.SECONDS);
+        this.crossfadeTask = PlayerManager.scheduledExecutor.scheduleAtFixedRate(this::checkCrossfade, 1, 1, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     public AudioPlayer getActivePlayer() {
@@ -695,6 +696,13 @@ public class TrackScheduler extends AudioEventAdapter {
         musicManager.updateVoiceChannelStatus(com.discord.musicbot.config.EmojiConfig.getInstance().addMusic + " Use /play to queue a song");
         musicManager.startIdleTimeout();
         musicManager.notifySessionChanged();
+    }
+
+    public void cleanup() {
+        stop();
+        if (crossfadeTask != null) {
+            crossfadeTask.cancel(true);
+        }
     }
 
     public int clear(String filterUserId) {

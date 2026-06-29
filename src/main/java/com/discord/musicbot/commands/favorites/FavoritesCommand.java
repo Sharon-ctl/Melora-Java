@@ -134,19 +134,23 @@ public class FavoritesCommand extends SlashCommand {
 
     private void handleList(CommandContext ctx) {
         PlaylistData fav = getFav(ctx);
-        OptionMapping pageOpt = ctx.getOption("page");
+        net.dv8tion.jda.api.interactions.commands.OptionMapping pageOpt = ctx.getOption("page");
         int page = pageOpt != null ? Math.max(1, (int) pageOpt.getAsLong()) : 1;
-        var embed = EmbedHelper.createPlaylistTracksEmbed(fav, page);
+        var container = com.discord.musicbot.commands.framework.EmbedHelper.createPlaylistTracksContainer(fav, page);
         int maxPages = Math.max(1, (int) Math.ceil(fav.getTracks().size() / 10.0));
-        ctx.getEvent().replyEmbeds(embed).setComponents(
-                net.dv8tion.jda.api.components.actionrow.ActionRow.of(
-                        EmbedHelper.createPaginationButtons("favlist_" + ctx.getUser().getId(), page, maxPages)
-                )).queue();
+        
+        java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
+        comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                com.discord.musicbot.commands.framework.EmbedHelper.createPaginationButtons("favlist_" + ctx.getUser().getId(), page, maxPages)
+        ));
+        var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
+        ctx.getEvent().reply("").setComponents(finalContainer).useComponentsV2().queue();
     }
 
     private void handleInfo(CommandContext ctx) {
         PlaylistData fav = getFav(ctx);
-        ctx.getEvent().replyEmbeds(EmbedHelper.createPlaylistInfoEmbed(fav)).queue();
+        var container = com.discord.musicbot.commands.framework.EmbedHelper.createPlaylistInfoContainer(fav);
+        ctx.getEvent().reply("").setComponents(container).useComponentsV2().queue();
     }
 
     private void handleClear(CommandContext ctx) {

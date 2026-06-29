@@ -43,11 +43,14 @@ public class VoteCommand extends SlashCommand {
             ctx.replySuccess("Vote automatically passed (Not enough listeners to require a vote).");
         } else if ("started".equals(result)) {
             int required = (int) Math.ceil((VoteManager.getInstance().getActiveListenersCount(ctx.getGuild()) * defaultThreshold) / 100.0);
-            ctx.getEvent().replyEmbeds(EmbedHelper.createVoteEmbed(type.name(), 1, required))
-               .setComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
-                       net.dv8tion.jda.api.components.buttons.Button.success("vote_yes", "Yes"),
-                       net.dv8tion.jda.api.components.buttons.Button.danger("vote_no", "No")
-               )).queue(hook -> {
+            var container = EmbedHelper.createVoteContainer(type.name(), 1, required);
+            java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
+            comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                   net.dv8tion.jda.api.components.buttons.Button.success("vote_yes", "Yes"),
+                   net.dv8tion.jda.api.components.buttons.Button.danger("vote_no", "No")
+            ));
+            var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
+            ctx.getEvent().replyComponents(finalContainer).useComponentsV2().queue(hook -> {
                    hook.retrieveOriginal().queue(msg -> {
                        VoteManager.getInstance().registerVoteMessage(ctx.getGuild().getId(), msg.getChannel().getId(), msg.getId());
                    });

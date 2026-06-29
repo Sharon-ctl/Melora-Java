@@ -12,8 +12,8 @@ import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
-import net.dv8tion.jda.api.EmbedBuilder;
-import java.awt.Color;
+
+
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,10 +56,9 @@ public class SearchCommand extends SlashCommand {
                 
                 com.discord.musicbot.audio.PlayerManager.scheduledExecutor.schedule(() -> searchCache.remove(searchId), 5, java.util.concurrent.TimeUnit.MINUTES);
 
-                EmbedBuilder eb = new EmbedBuilder();
-                eb.setColor(new Color(EmbedHelper.COLOR_MAIN));
-                eb.setTitle("Search Results for: " + query);
-                eb.setDescription("Please select a track from the dropdown menu below.");
+                String safeQuery = EmbedHelper.escapeMarkdown(query);
+                String title = "Search Results for: " + safeQuery;
+                String description = "Please select a track from the dropdown menu below.";
                 
                 StringSelectMenu.Builder menuBuilder = StringSelectMenu.create("search_" + searchId + "_" + ctx.getMember().getId())
                     .setPlaceholder("Select a track to play...");
@@ -73,14 +72,21 @@ public class SearchCommand extends SlashCommand {
                     menuBuilder.addOption(label, String.valueOf(i), desc);
                 }
                 
-                ctx.getEvent().getHook().sendMessageEmbeds(eb.build())
-                    .setComponents(ActionRow.of(menuBuilder.build()))
+                var container = EmbedHelper.buildContainer(title, description, null);
+                
+                java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
+                comps.add(ActionRow.of(menuBuilder.build()));
+                net.dv8tion.jda.api.components.container.Container finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
+                
+                ctx.getEvent().getHook().sendMessage("")
+                    .setComponents(finalContainer)
+                    .useComponentsV2()
                     .queue();
             }
 
             @Override
             public void noMatches() {
-                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " No results found for `" + query + "`.").queue();
+                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " No results found for `" + EmbedHelper.escapeMarkdown(query) + "`.").queue();
             }
 
             @Override

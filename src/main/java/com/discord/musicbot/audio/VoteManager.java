@@ -136,8 +136,8 @@ public class VoteManager {
             return;
         }
 
-        event.editMessageEmbeds(EmbedHelper.createVoteEmbed(vote.type.name(), vote.yesVotes.size(), required))
-             .queue();
+        var container = EmbedHelper.createVoteContainer(vote.type.name(), vote.yesVotes.size(), required);
+        event.editMessage("").setComponents(container).useComponentsV2().queue();
     }
 
     private int getThresholdForType(Guild guild, VoteType type) {

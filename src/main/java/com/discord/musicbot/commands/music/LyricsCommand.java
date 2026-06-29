@@ -11,7 +11,7 @@ import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
-import net.dv8tion.jda.api.entities.MessageEmbed;
+
 import net.dv8tion.jda.api.components.buttons.Button;
 
 
@@ -69,10 +69,13 @@ public class LyricsCommand extends SlashCommand {
             String lyricsId = java.util.UUID.randomUUID().toString();
             LyricsCache.put(lyricsId, new LyricsCache.LyricsData(finalQuery, pages, result.source, result.isLive));
 
-            MessageEmbed embed = EmbedHelper.createLyricsEmbed(finalQuery, pages, 1, result.source, result.isLive);
+            var container = EmbedHelper.createLyricsContainer(finalQuery, pages, 1, result.source, result.isLive);
             List<Button> buttons = EmbedHelper.createLyricsComponents(lyricsId, 1, pages.size());
+            java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>(container.getComponents());
+            comps.add(net.dv8tion.jda.api.components.actionrow.ActionRow.of(buttons));
+            var finalContainer = net.dv8tion.jda.api.components.container.Container.of(comps);
             
-            ctx.getEvent().getHook().editOriginalEmbeds(embed).setComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(buttons)).queue();
+            ctx.getEvent().getHook().editOriginal("").setComponents(finalContainer).useComponentsV2().queue();
         });
     }
 

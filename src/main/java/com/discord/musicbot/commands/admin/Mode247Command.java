@@ -49,15 +49,34 @@ public class Mode247Command extends SlashCommand {
             }
         }
 
+        boolean current247 = settings.isMode247();
+        if (!current247) {
+            // We are turning it ON. User MUST be in a VC.
+            var userState = ctx.getMember().getVoiceState();
+            if (userState == null || !userState.inAudioChannel()) {
+                ctx.replyError("You must be in a voice channel to enable 24/7 mode.");
+                return;
+            }
+            // Auto connect bot if not in VC
+            var botState = ctx.getGuild().getSelfMember().getVoiceState();
+            if (botState == null || !botState.inAudioChannel()) {
+                ctx.getGuild().getAudioManager().openAudioConnection(userState.getChannel());
+            }
+        }
+
         boolean enabled = com.discord.musicbot.data.DatabaseManager.getInstance().toggle247(ctx.getGuild().getId());
-        ctx.getMusicManager().set247(enabled);
+        if (ctx.getMusicManager() != null) {
+            ctx.getMusicManager().set247(enabled);
+        }
         settings.setMode247(enabled);
         if (!enabled) {
             settings.setMode247Locked(false);
             settings.setLockedVoiceChannelId(null);
         }
         com.discord.musicbot.data.GuildSettingsManager.getInstance().markDirty();
-        ctx.getMusicManager().updateNowPlayingMessage();
+        if (ctx.getMusicManager() != null) {
+            ctx.getMusicManager().updateNowPlayingMessage();
+        }
         ctx.replySuccess("24/7 mode is now " + (enabled ? "**ON**" : "**OFF**"));
     }
 
@@ -65,7 +84,7 @@ public class Mode247Command extends SlashCommand {
     public boolean requiresDj() { return true; }
 
     @Override
-    public boolean requiresVoice() { return true; }
+    public boolean requiresVoice() { return false; }
 
     @Override
     public boolean requiresBotInVoice() { return false; }

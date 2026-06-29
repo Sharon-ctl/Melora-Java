@@ -6,9 +6,7 @@ import com.discord.musicbot.commands.framework.EmbedHelper;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-import net.dv8tion.jda.api.EmbedBuilder;
 
-import java.awt.Color;
 
 public class GrabCommand extends SlashCommand {
     @Override
@@ -22,19 +20,31 @@ public class GrabCommand extends SlashCommand {
             return;
         }
 
-        EmbedBuilder eb = new EmbedBuilder();
-        eb.setColor(new Color(EmbedHelper.COLOR_MAIN));
-        eb.setTitle("Saved Song: " + track.getInfo().title, track.getInfo().uri);
-        eb.setAuthor(track.getInfo().author);
-        eb.addField("Duration", EmbedHelper.formatDuration(track.getDuration()), true);
+        String title = "Saved Song: " + track.getInfo().title;
+        StringBuilder desc = new StringBuilder();
+        desc.append("**Author:** ").append(track.getInfo().author).append("\n");
+        desc.append("**Duration:** ").append(EmbedHelper.formatDuration(track.getDuration())).append("\n");
+        desc.append("**Link:** ").append(track.getInfo().uri).append("\n");
         
+        java.util.List<net.dv8tion.jda.api.components.container.ContainerChildComponent> comps = new java.util.ArrayList<>();
+        java.util.List<net.dv8tion.jda.api.components.textdisplay.TextDisplay> texts = new java.util.ArrayList<>();
+        texts.add(net.dv8tion.jda.api.components.textdisplay.TextDisplay.of("### " + title));
+        texts.add(net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(desc.toString()));
+
         if (track.getInfo().uri.contains("youtube.com") || track.getInfo().uri.contains("youtu.be")) {
-            eb.setThumbnail("https://img.youtube.com/vi/" + track.getIdentifier() + "/hqdefault.jpg");
+            comps.add(net.dv8tion.jda.api.components.section.Section.of(
+                net.dv8tion.jda.api.components.thumbnail.Thumbnail.fromUrl("https://img.youtube.com/vi/" + track.getIdentifier() + "/hqdefault.jpg"),
+                texts
+            ));
+        } else {
+            comps.addAll(texts);
         }
+
+        var container = net.dv8tion.jda.api.components.container.Container.of(comps);
 
         ctx.getMember().getUser().openPrivateChannel().queue(
             channel -> {
-                channel.sendMessageEmbeds(eb.build()).queue(
+                channel.sendMessageComponents(container).useComponentsV2().queue(
                     success -> ctx.reply(EmbedHelper.MSG_SUCCESS + " I've sent you a DM with the current song!"),
                     error -> ctx.replyError("I couldn't send you a DM. Please check your privacy settings.")
                 );

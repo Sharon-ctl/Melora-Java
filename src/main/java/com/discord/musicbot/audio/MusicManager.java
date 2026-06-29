@@ -5,7 +5,7 @@ import com.discord.musicbot.data.SessionManager.SessionSnapshot;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.EmbedBuilder;
+
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import java.util.ArrayList;
 import java.util.List;
@@ -471,7 +471,6 @@ public class MusicManager {
                 channel.sendMessage("")
                         .setComponents(container)
                         .setAllowedMentions(java.util.Collections.emptyList())
-                        .useComponentsV2()
                         .queue(msg -> {
                             nowPlayingMessageId = msg.getId();
                             isSendingNowPlaying = false;
@@ -565,6 +564,11 @@ public class MusicManager {
     // --- Alone Mode Logic ---
 
     public void onBotAlone() {
+        if (mode247) {
+            logger.info("Bot is alone but 24/7 mode is on. Ignoring.");
+            return;
+        }
+
         logger.info("Bot is alone in voice channel. Scheduling 3 minute timeout action.");
 
         // Cancel any existing alone timer first
@@ -589,34 +593,16 @@ public class MusicManager {
             try {
                 boolean isPlayingOrQueued = scheduler.getCurrentTrack() != null || !scheduler.getQueue().isEmpty();
                 
-                if (mode247) {
-                    if (isPlayingOrQueued) {
-                        logger.info("Alone timeout reached (24/7 mode) for guild: {}", guild.getName());
-                        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());
-                        if (settings.isMode247Locked()) {
-                            logger.info("Alone timeout reached (24/7 mode) for guild: {} - Session is LOCKED, ignoring.", guild.getName());
-                        } else {
-                            sendSimpleEmbed(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
-                                    + " Stopped playback and cleared the queue because I was left alone for 3 minutes.");
-                            scheduler.getQueue().clear();
-                            scheduler.stop();
-                            updateVoiceChannelStatus();
-                        }
-                    } else {
-                        logger.info("Alone timeout reached (24/7 mode) for guild: {} - Already stopped, staying quiet.", guild.getName());
-                    }
-                } else {
-                    logger.info("Alone timeout reached for guild: {}", guild.getName());
-                    if (isPlayingOrQueued) {
-                        sendSimpleEmbed(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
-                                + " Disconnected because I was left alone for 3 minutes.");
-                    }
-                    disconnect();
+                logger.info("Alone timeout reached for guild: {}", guild.getName());
+                if (isPlayingOrQueued) {
+                    sendSimpleEmbed(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
+                            + " Disconnected because I was left alone for 3 minutes.");
                 }
+                disconnect();
             } catch (Exception e) {
                 logger.error("Error in alone task", e);
             }
-        }, 3, TimeUnit.MINUTES);
+        }, 3, java.util.concurrent.TimeUnit.MINUTES);
     }
 
     public void onHumanJoined() {
@@ -651,10 +637,8 @@ public class MusicManager {
             net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = guild.getChannelById(
                     net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, nowPlayingChannelId);
             if (ch != null) {
-                EmbedBuilder embed = new EmbedBuilder();
-                embed.setColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN);
-                embed.setDescription(message);
-                ch.sendMessageEmbeds(embed.build()).queue();
+                var container = com.discord.musicbot.commands.framework.EmbedHelper.buildContainer(null, message, null);
+                ch.sendMessage("").setComponents(container).useComponentsV2().queue();
             }
         } catch (Exception e) {
             logger.debug("Failed to send simple embed", e);
@@ -1026,6 +1010,7 @@ public class MusicManager {
         if (watchdogTask != null) watchdogTask.cancel(true);
         if (karaokeTask != null) karaokeTask.cancel(true);
 
+        scheduler.cleanup();
         player.destroy();
         logger.debug("MusicManager cleanly shutdown for guild: {}", guild.getName());
     }
