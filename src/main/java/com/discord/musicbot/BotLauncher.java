@@ -85,6 +85,7 @@ public class BotLauncher {
                         JDA jda = JDABuilder.createDefault(token)
                                         .enableIntents(GatewayIntent.GUILD_VOICE_STATES, GatewayIntent.GUILD_MESSAGES)
                                         .enableCache(CacheFlag.VOICE_STATE)
+                                        .setMemberCachePolicy(net.dv8tion.jda.api.utils.MemberCachePolicy.VOICE)
                                         .setAudioModuleConfig(new net.dv8tion.jda.api.audio.AudioModuleConfig()
                                                 .withDaveSessionFactory(new club.minnced.discord.jdave.interop.JDaveSessionFactory()))
                                         .setActivity(Activity.listening("/play"))

@@ -576,9 +576,9 @@ public class MusicManager {
                 scheduler.pause();
             }
             
-            // Update now playing embed and voice channel status
-            sendNowPlayingMessage(false);
-            updateVoiceChannelStatus();
+            // Edit existing now playing embed to show paused state
+            updateNowPlayingMessage();
+            updateVoiceChannelStatus("Paused song");
         }
 
         aloneTask = PlayerManager.scheduledExecutor.schedule(() -> {
@@ -608,9 +608,12 @@ public class MusicManager {
             scheduler.resume();
             wasAlonePaused = false;
             
-            // Update now playing embed and voice channel status
-            sendNowPlayingMessage(false);
-            updateVoiceChannelStatus();
+            // Edit existing now playing embed to show resumed state
+            updateNowPlayingMessage();
+            AudioTrack current = scheduler.getCurrentTrack();
+            if (current != null) {
+                updateVoiceChannelStatus(com.discord.musicbot.config.EmojiConfig.getInstance().music + " " + current.getInfo().title);
+            }
         }
     }
 

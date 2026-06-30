@@ -122,7 +122,7 @@ public class TrackScheduler extends AudioEventAdapter {
         }
 
         musicManager.resetKaraokeTrack();
-        musicManager.sendNowPlayingMessage(true, track);
+        musicManager.sendNowPlayingMessage(false, track);
 
         musicManager.updateVoiceChannelStatus(com.discord.musicbot.config.EmojiConfig.getInstance().music + " " + track.getInfo().title);
 
