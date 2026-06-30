@@ -407,34 +407,7 @@ public class MusicManager {
             }
         }
 
-        // Message Recovery: If ID is missing but we want to EDIT (forceNew=false), try
-        // to find an existing message
-        if (nowPlayingMessageId == null && !forceNew) {
-            try {
-                finalChannel.getHistory().retrievePast(10).queue(messages -> {
-                    try {
-                        for (net.dv8tion.jda.api.entities.Message msg : messages) {
-                            if (msg.getAuthor().equals(guild.getJDA().getSelfUser()) && !msg.getEmbeds().isEmpty()) {
-                                nowPlayingMessageId = msg.getId();
-                                break;
-                            }
-                        }
-                        finalizeNowPlayingMessage(finalChannel, embed);
-                    } catch (Exception ex) {
-                        isSendingNowPlaying = false;
-                    }
-                }, e -> {
-                    try {
-                        finalizeNowPlayingMessage(finalChannel, embed);
-                    } catch (Exception ex) {
-                        isSendingNowPlaying = false;
-                    }
-                });
-            } catch (Exception e) {
-                isSendingNowPlaying = false;
-            }
-            return;
-        }
+
 
         try {
             finalizeNowPlayingMessage(finalChannel, embed);
