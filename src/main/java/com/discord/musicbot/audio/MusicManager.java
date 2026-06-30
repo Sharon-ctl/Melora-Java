@@ -323,9 +323,9 @@ public class MusicManager {
         player.destroy();
     }
 
-    private String nowPlayingChannelId;
-    private String nowPlayingMessageId;
-    private boolean isSendingNowPlaying = false;
+    private volatile String nowPlayingChannelId;
+    private volatile String nowPlayingMessageId;
+    private volatile boolean isSendingNowPlaying = false;
 
     public void setNowPlayingChannel(String channelId) {
         if (nowPlayingChannelId != null && !nowPlayingChannelId.equals(channelId)) {
