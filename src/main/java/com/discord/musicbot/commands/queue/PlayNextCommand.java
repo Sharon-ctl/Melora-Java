@@ -15,6 +15,7 @@ public class PlayNextCommand extends SlashCommand {
 
     @Override
     public void execute(CommandContext ctx) {
+        ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
         String query = ctx.getOption("query").getAsString();
         ctx.deferReply();
         if (!query.startsWith("http") && !query.contains(":")) {

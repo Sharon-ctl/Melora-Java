@@ -46,17 +46,40 @@ public class VoiceEventHandler extends ListenerAdapter {
                 }
 
                 MusicManager manager = PlayerManager.getInstance().getMusicManager(guild.getIdLong());
-                
-                if (manager != null && manager.getNowPlayingChannelId() != null) {
-                    net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel tc = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, manager.getNowPlayingChannelId());
-                    if (tc != null) {
-                        String desc = "☹️ I was forcefully disconnected! My queue has been cleared.";
-                        var embed = new net.dv8tion.jda.api.EmbedBuilder()
-                            .setColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN)
-                            .setDescription(desc)
-                            .build();
-                        tc.sendMessageEmbeds(embed).queue(null, new net.dv8tion.jda.api.exceptions.ErrorHandler().ignore(net.dv8tion.jda.api.exceptions.ErrorResponseException.class));
+                net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel tc = null;
+                if (manager != null) {
+                    tc = manager.getAnnouncementChannel();
+                }
+                if (tc == null) {
+                    com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());
+                    if (settings.getCommandChannelId() != null && !settings.getCommandChannelId().isEmpty()) {
+                        try { tc = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, settings.getCommandChannelId()); } catch (Exception ignored) {}
                     }
+                }
+                if (tc == null) {
+                    try {
+                        if (guild.getSystemChannel() != null && guild.getSelfMember().hasPermission(guild.getSystemChannel(), net.dv8tion.jda.api.Permission.MESSAGE_SEND)) {
+                            tc = guild.getSystemChannel();
+                        }
+                    } catch (Exception ignored) {}
+                }
+                if (tc == null) {
+                    try {
+                        for (net.dv8tion.jda.api.entities.channel.concrete.TextChannel ch : guild.getTextChannels()) {
+                            if (guild.getSelfMember().hasPermission(ch, net.dv8tion.jda.api.Permission.MESSAGE_SEND, net.dv8tion.jda.api.Permission.VIEW_CHANNEL)) {
+                                tc = ch;
+                                break;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+                if (tc != null) {
+                    String desc = "☹️ I was forcefully disconnected! My queue has been cleared.";
+                    var embed = new net.dv8tion.jda.api.EmbedBuilder()
+                        .setColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN)
+                        .setDescription(desc)
+                        .build();
+                    tc.sendMessageEmbeds(embed).queue(null, new net.dv8tion.jda.api.exceptions.ErrorHandler().ignore(net.dv8tion.jda.api.exceptions.ErrorResponseException.class));
                 }
                 
                 com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());

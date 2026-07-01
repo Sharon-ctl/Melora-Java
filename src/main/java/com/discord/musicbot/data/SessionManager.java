@@ -65,6 +65,7 @@ public class SessionManager {
         public int volume;
         public String loopMode;
         public boolean autoplay;
+        public boolean randomPlay;
         public boolean mode247;
         public boolean isPaused;
         public boolean wasAlonePaused;

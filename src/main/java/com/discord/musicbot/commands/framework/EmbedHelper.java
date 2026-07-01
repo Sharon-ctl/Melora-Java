@@ -134,8 +134,12 @@ public class EmbedHelper {
         }
         if (manager.getScheduler().isPaused())
             footer.append(" | Paused");
-        if (manager.getScheduler().getAutoplay())
+        if (manager.getScheduler().getAutoplay() && manager.getScheduler().isRandomPlay())
+            footer.append(" | Autoplay + Random");
+        else if (manager.getScheduler().getAutoplay())
             footer.append(" | Autoplay");
+        else if (manager.getScheduler().isRandomPlay())
+            footer.append(" | Random");
 
         embed.setFooter(footer.toString());
 
@@ -619,6 +623,7 @@ public class EmbedHelper {
         
         embed.addField("24/7 Mode", settings.isMode247() ? enabledEmoji : disabledEmoji, true);
         embed.addField("Autoplay", settings.isAutoplay() ? enabledEmoji : disabledEmoji, true);
+        embed.addField("Random Play", settings.isRandomPlay() ? enabledEmoji : disabledEmoji, true);
         embed.addField("DJ Mode", settings.isDjMode() ? enabledEmoji : disabledEmoji, true);
         
         String channel = settings.getCommandChannelId() != null ? "<#" + settings.getCommandChannelId() + ">" : "Any";
@@ -634,9 +639,11 @@ public class EmbedHelper {
         Button announceBtn = Button.secondary("setting_announce", "Announce: " + (settings.isAnnounceTracks() ? "ON" : "OFF"));
         Button mode247Btn = Button.secondary("setting_247", "24/7: " + (settings.isMode247() ? "ON" : "OFF"));
         Button autoplayBtn = Button.secondary("setting_autoplay", "Autoplay: " + (settings.isAutoplay() ? "ON" : "OFF"));
+        Button randomBtn = Button.secondary("setting_random", "Random: " + (settings.isRandomPlay() ? "ON" : "OFF"));
         Button djBtn = Button.secondary("setting_dj", "DJ Mode: " + (settings.isDjMode() ? "ON" : "OFF"));
         
-        rows.add(ActionRow.of(statusBtn, announceBtn, mode247Btn, autoplayBtn, djBtn));
+        rows.add(ActionRow.of(statusBtn, announceBtn, mode247Btn));
+        rows.add(ActionRow.of(autoplayBtn, randomBtn, djBtn));
         return rows;
     }
 }

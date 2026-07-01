@@ -232,18 +232,13 @@ public class MusicManager {
                 logger.info("Idle timeout reached for guild: {}", guild.getName());
 
                 // Send Bye Message
-                if (nowPlayingChannelId != null) {
-                    try {
-                        net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = guild.getChannelById(
-                                net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class,
-                                nowPlayingChannelId);
-                        if (ch != null) {
-                            ch.sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
-                                    + " Disconnected due to inactivity. Bye!").queue();
-                        }
-                    } catch (Exception e) {
+                try {
+                    net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = getAnnouncementChannel();
+                    if (ch != null) {
+                        ch.sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
+                                + " Disconnected due to inactivity. Bye!").queue();
                     }
-                }
+                } catch (Exception ignored) {}
 
                 disconnect();
             } catch (Exception e) {
@@ -339,6 +334,44 @@ public class MusicManager {
         return nowPlayingChannelId;
     }
 
+    public synchronized net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel getAnnouncementChannel() {
+        net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel tc = null;
+        if (nowPlayingChannelId != null) {
+            try {
+                tc = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, nowPlayingChannelId);
+            } catch (Exception ignored) {}
+        }
+        if (tc == null) {
+            try {
+                com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());
+                if (settings.getCommandChannelId() != null && !settings.getCommandChannelId().isEmpty()) {
+                    tc = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, settings.getCommandChannelId());
+                }
+            } catch (Exception ignored) {}
+        }
+        if (tc == null) {
+            try {
+                if (guild.getSystemChannel() != null && guild.getSelfMember().hasPermission(guild.getSystemChannel(), net.dv8tion.jda.api.Permission.MESSAGE_SEND)) {
+                    tc = guild.getSystemChannel();
+                }
+            } catch (Exception ignored) {}
+        }
+        if (tc == null) {
+            try {
+                for (net.dv8tion.jda.api.entities.channel.concrete.TextChannel ch : guild.getTextChannels()) {
+                    if (guild.getSelfMember().hasPermission(ch, net.dv8tion.jda.api.Permission.MESSAGE_SEND, net.dv8tion.jda.api.Permission.VIEW_CHANNEL)) {
+                        tc = ch;
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        if (tc != null && nowPlayingChannelId == null) {
+            nowPlayingChannelId = tc.getId();
+        }
+        return tc;
+    }
+
     // --- Now Playing Message ---
 
     private String formatTime(long duration) {
@@ -373,23 +406,14 @@ public class MusicManager {
     public synchronized void sendNowPlayingMessage(boolean forceNew, com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
         if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId()).isAnnounceTracks()) return;
         
-        if (nowPlayingChannelId == null)
+        net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel channel = getAnnouncementChannel();
+        if (channel == null)
             return;
         if (isSendingNowPlaying)
             return; // Prevent concurrent duplicate sends
 
         com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride : scheduler.getCurrentTrack();
         if (track == null)
-            return;
-
-        net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel channel = null;
-        try {
-            channel = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class,
-                    nowPlayingChannelId);
-        } catch (Exception e) {
-        }
-
-        if (channel == null)
             return;
 
         final net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel finalChannel = channel;
@@ -501,10 +525,11 @@ public class MusicManager {
 
         String loopModeStr = scheduler.getLoopMode().name().charAt(0)
                 + scheduler.getLoopMode().name().substring(1).toLowerCase();
-        String loopStr = loopModeStr;
-        if (scheduler.isAutoPlay()) {
-            loopStr = loopModeStr.equals("Off") ? "Autoplay" : loopModeStr + " + Autoplay";
-        }
+        java.util.List<String> activeModes = new java.util.ArrayList<>();
+        if (!loopModeStr.equals("Off")) activeModes.add(loopModeStr);
+        if (scheduler.isAutoPlay()) activeModes.add("Autoplay");
+        if (scheduler.isRandomPlay()) activeModes.add("Random");
+        String loopStr = activeModes.isEmpty() ? "Off" : String.join(" + ", activeModes);
 
         StringBuilder footer = new StringBuilder();
         footer.append(String.format("Vol: %d%% | Loop: %s", player.getVolume(), loopStr));
@@ -607,10 +632,8 @@ public class MusicManager {
      * Send a simple embed message to the last known text channel.
      */
     private void sendSimpleEmbed(String message) {
-        if (nowPlayingChannelId == null) return;
         try {
-            net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = guild.getChannelById(
-                    net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, nowPlayingChannelId);
+            net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = getAnnouncementChannel();
             if (ch != null) {
                 var embed = new net.dv8tion.jda.api.EmbedBuilder()
                         .setColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN)
@@ -810,6 +833,7 @@ public class MusicManager {
         snapshot.volume = scheduler.getVolume();
         snapshot.loopMode = scheduler.getLoopMode().name();
         snapshot.autoplay = scheduler.getAutoplay();
+        snapshot.randomPlay = scheduler.isRandomPlay();
         snapshot.mode247 = mode247;
         snapshot.isPaused = scheduler.isPaused();
         snapshot.wasAlonePaused = wasAlonePaused;
@@ -844,6 +868,7 @@ public class MusicManager {
         if (snapshot.autoplay != scheduler.getAutoplay()) {
             scheduler.toggleAutoplay();
         }
+        scheduler.setRandomPlay(snapshot.randomPlay);
         
         if (snapshot.isPaused) {
             scheduler.pause();
@@ -913,8 +938,9 @@ public class MusicManager {
                     com.discord.musicbot.data.DatabaseManager.getInstance().toggle247(guild.getId());
                 }
             }
-            if (settings.isAutoplay()) {
+            if (settings.isAutoplay() || settings.isRandomPlay()) {
                 settings.setAutoplay(false);
+                settings.setRandomPlay(false);
             }
             com.discord.musicbot.data.GuildSettingsManager.getInstance().markDirty();
         } catch (Exception e) {

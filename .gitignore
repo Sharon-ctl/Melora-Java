@@ -52,6 +52,9 @@ gradle/
 # Maven generated
 dependency-reduced-pom.xml
 maven-extracted/
+.mvn/
+mvnw
+mvnw.cmd
 
 # Temporary and scratch files
 scratch*

@@ -95,6 +95,15 @@ public class InteractionHandler {
                     com.discord.musicbot.audio.PlayerManager.getInstance().getMusicManager(event.getGuild().getIdLong()).updateNowPlayingMessage();
                 }
                 break;
+            case "setting_random":
+                boolean newRan = !settings.isRandomPlay();
+                settings.setRandomPlay(newRan);
+                if (com.discord.musicbot.audio.PlayerManager.getInstance().getMusicManager(event.getGuild().getIdLong()) != null) {
+                    com.discord.musicbot.audio.TrackScheduler scheduler = com.discord.musicbot.audio.PlayerManager.getInstance().getMusicManager(event.getGuild().getIdLong()).getScheduler();
+                    scheduler.setRandomPlay(newRan);
+                    com.discord.musicbot.audio.PlayerManager.getInstance().getMusicManager(event.getGuild().getIdLong()).updateNowPlayingMessage();
+                }
+                break;
             case "setting_dj":
                 settings.setDjMode(!settings.isDjMode());
                 break;

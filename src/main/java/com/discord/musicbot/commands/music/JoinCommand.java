@@ -20,6 +20,7 @@ public class JoinCommand extends SlashCommand {
             return;
         }
 
+        ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
         ctx.getMusicManager().connectToVoiceChannel(userChannel);
         ctx.reply(EmbedHelper.MSG_SUCCESS + " Joined **" + userChannel.getName() + "**!");
     }

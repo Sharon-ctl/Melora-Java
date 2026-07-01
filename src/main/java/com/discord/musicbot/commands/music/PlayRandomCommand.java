@@ -29,6 +29,9 @@ public class PlayRandomCommand extends SlashCommand {
 
     @Override
     public void execute(CommandContext ctx) {
+        ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
+        boolean continuous = ctx.getOption("continuous") == null || ctx.getOption("continuous").getAsBoolean();
+        ctx.getScheduler().setRandomPlay(continuous);
         String source = ctx.getOption("source") != null ? ctx.getOption("source").getAsString() : "history";
         
         String trackQuery = null;
@@ -106,7 +109,8 @@ public class PlayRandomCommand extends SlashCommand {
             .addOptions(
                 new OptionData(OptionType.STRING, "source", "Where to pick the random track from", false)
                     .addChoice("Bot History", "history")
-                    .addChoice("My Favorites", "favorites")
+                    .addChoice("My Favorites", "favorites"),
+                new OptionData(OptionType.BOOLEAN, "continuous", "Keep playing random songs continuously (default: true)", false)
             );
     }
 }

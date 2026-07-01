@@ -6,6 +6,7 @@ import java.util.List;
 public class GuildSettings {
     private int volume = 100;
     private boolean autoplay = false;
+    private boolean randomPlay = false;
     private boolean mode247 = false;
     private boolean djMode = false;
     private String djRole = null;
@@ -33,6 +34,9 @@ public class GuildSettings {
 
     public synchronized boolean isAutoplay() { return autoplay; }
     public synchronized void setAutoplay(boolean autoplay) { this.autoplay = autoplay; }
+
+    public synchronized boolean isRandomPlay() { return randomPlay; }
+    public synchronized void setRandomPlay(boolean randomPlay) { this.randomPlay = randomPlay; }
 
     public synchronized boolean isMode247() { return mode247; }
     public synchronized void setMode247(boolean mode247) { this.mode247 = mode247; }

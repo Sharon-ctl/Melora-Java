@@ -199,6 +199,7 @@ public class QueueCommand extends SlashCommand {
             return;
         }
         
+        ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
         ctx.deferReply();
         attachment.getProxy().download().thenAccept(inputStream -> {
             try {

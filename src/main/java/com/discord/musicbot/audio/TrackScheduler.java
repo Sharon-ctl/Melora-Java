@@ -40,6 +40,7 @@ public class TrackScheduler extends AudioEventAdapter {
     private volatile AudioTrack currentTrack;
     private volatile LoopMode loopMode = LoopMode.OFF;
     private volatile boolean autoplay = false;
+    private volatile boolean randomPlay = false;
     private volatile boolean primaryIsActive = true;
     private volatile boolean crossfadeFired = false;
     private final java.util.concurrent.ScheduledFuture<?> crossfadeTask;
@@ -275,12 +276,13 @@ public class TrackScheduler extends AudioEventAdapter {
             currentTrack = next;
             musicManager.cancelIdleTimeout();
 
-            if (autoplay && queue.isEmpty()) {
+            if ((autoplay || randomPlay) && queue.isEmpty()) {
                 AudioTrack seed = next;
+                boolean useRandom = randomPlay;
                 int gen = playbackGeneration.get();
                 preloadFuture = CompletableFuture.runAsync(() -> {
                     try {
-                        AudioTrack related = getRelatedTrack(seed);
+                        AudioTrack related = useRandom ? getRandomRelatedTrack(seed) : getRelatedTrack(seed);
                         if (related != null && gen == playbackGeneration.get()) {
                             related.setUserData(seed.getUserData());
                             preloadedAutoplayTrack = related;
@@ -290,7 +292,8 @@ public class TrackScheduler extends AudioEventAdapter {
                 }, com.discord.musicbot.audio.PlayerManager.ioExecutor);
             }
         } else {
-            if (autoplay) {
+            if (autoplay || randomPlay) {
+                boolean useRandom = randomPlay;
                 // If preload is still running, wait briefly for it
                 if (preloadedAutoplayTrack == null && preloadFuture != null && !preloadFuture.isDone()) {
                     try {
@@ -300,7 +303,7 @@ public class TrackScheduler extends AudioEventAdapter {
                 }
 
                 if (preloadedAutoplayTrack != null) {
-                    logger.info("Using pre-loaded autoplay track: {}", preloadedAutoplayTrack.getInfo().title);
+                    logger.info("Using pre-loaded track ({}): {}", useRandom ? "RandomPlay" : "Autoplay", preloadedAutoplayTrack.getInfo().title);
                     AudioTrack track = preloadedAutoplayTrack;
                     preloadedAutoplayTrack = null;
                     getActivePlayer().startTrack(track, false);
@@ -310,7 +313,7 @@ public class TrackScheduler extends AudioEventAdapter {
                     int gen = playbackGeneration.get();
                     preloadFuture = CompletableFuture.runAsync(() -> {
                         try {
-                            AudioTrack related = getRelatedTrack(track);
+                            AudioTrack related = useRandom ? getRandomRelatedTrack(track) : getRelatedTrack(track);
                             if (related != null && gen == playbackGeneration.get()) {
                                 related.setUserData(track.getUserData());
                                 preloadedAutoplayTrack = related;
@@ -324,7 +327,7 @@ public class TrackScheduler extends AudioEventAdapter {
                 if (currentTrack != null || !history.isEmpty()) {
                     AudioTrack seed = currentTrack != null ? currentTrack : history.peekFirst();
                     if (seed != null) {
-                        logger.info("Autoplay triggered (Fallback). Seed: {}", seed.getInfo().title);
+                        logger.info("{} triggered (Fallback). Seed: {}", useRandom ? "RandomPlay" : "Autoplay", seed.getInfo().title);
                         int gen = playbackGeneration.get();
                         currentTrack = null; // Clear the track so the queue knows we are idle
                         if (player.getPlayingTrack() != null) {
@@ -333,14 +336,14 @@ public class TrackScheduler extends AudioEventAdapter {
 
                         CompletableFuture.runAsync(() -> {
                             try {
-                                AudioTrack related = getRelatedTrack(seed);
+                                AudioTrack related = useRandom ? getRandomRelatedTrack(seed) : getRelatedTrack(seed);
                                 if (related != null && gen == playbackGeneration.get()) {
                                     related.setUserData(seed.getUserData());
                                     queue(related);
                                     return;
                                 }
                             } catch (Exception e) {
-                                logger.error("Autoplay failed", e);
+                                logger.error("Autoplay/RandomPlay failed", e);
                             }
 
                             if (gen == playbackGeneration.get()) {
@@ -356,7 +359,7 @@ public class TrackScheduler extends AudioEventAdapter {
                         .getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class,
                                 musicManager.getNowPlayingChannelId());
                                         if (tc != null) {
-                                            tc.sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_ERROR + " Autoplay ran out of recommendations.").queue();
+                                            tc.sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_ERROR + " " + (useRandom ? "Random continuous play" : "Autoplay") + " ran out of recommendations.").queue();
                                         }
                                     } catch (Exception ignored) {}
                                 }
@@ -443,20 +446,20 @@ public class TrackScheduler extends AudioEventAdapter {
         logger.info("[AutoPlay] Reference: \"{}\" by {}", cleanTitle, artist);
 
         String[] searchQueries = {
+                "ytsearch:" + artist + " official audio",
+                "ytsearch:" + artist + " official music video",
                 "ytsearch:" + artist + " top songs",
                 "ytsearch:" + artist + " best songs",
-                "ytsearch:" + artist + " popular",
-                "ytsearch:" + artist + " greatest hits",
-                "ytsearch:similar to " + artist,
-                "ytsearch:songs like " + cleanTitle,
-                "ytsearch:" + artist + " type beat",
-                "ytsearch:artists like " + artist,
-                "ytsearch:" + artist + " latest songs",
-                "ytsearch:" + artist + " official audio",
-                "ytsearch:" + artist + " music",
-                "ytsearch:" + artist + " radio",
-                "ytsearch:music like " + cleanTitle,
-                "ytsearch:" + artist + " playlist"
+                "ytsearch:" + artist + " popular songs",
+                "ytsearch:" + artist + " greatest hits songs",
+                "ytsearch:" + artist + " latest songs official",
+                "ytsearch:songs like " + cleanTitle + " " + artist,
+                "ytsearch:similar songs to " + cleanTitle,
+                "ytsearch:" + artist + " full song",
+                "ytsearch:" + artist + " music video",
+                "ytsearch:songs similar to " + artist,
+                "ytsearch:music like " + cleanTitle + " song",
+                "ytsearch:" + artist + " audio"
         };
 
         for (String query : searchQueries) {
@@ -505,10 +508,11 @@ public class TrackScheduler extends AudioEventAdapter {
 
         try {
             logger.info("[AutoPlay] Trying final fallback...");
-            List<AudioTrack> fallback = loadTracks("ytsearch:" + artist);
+            List<AudioTrack> fallback = loadTracks("ytsearch:" + artist + " song official audio");
             if (fallback != null) {
                 AudioTrack valid = fallback.stream()
                         .filter(t -> isValidAutoPlayTrack(t, referenceTrack))
+                        .sorted((a, b) -> Integer.compare(getAutoplayScore(b, artist), getAutoplayScore(a, artist)))
                         .findFirst().orElse(null);
                 if (valid != null) {
                     playedAutoplayUris.add(valid.getInfo().uri);
@@ -519,6 +523,84 @@ public class TrackScheduler extends AudioEventAdapter {
         }
 
         logger.info("[AutoPlay] No suitable tracks found.");
+        return null;
+    }
+
+    private AudioTrack getRandomRelatedTrack(AudioTrack referenceTrack) {
+        String artist = referenceTrack.getInfo().author;
+        String title = referenceTrack.getInfo().title;
+        String cleanTitle = normalizeTitle(title);
+
+        logger.info("[RandomPlay] Reference: \"{}\" by {}", cleanTitle, artist);
+
+        String[] searchQueries = {
+                "ytsearch:" + artist + " similar artists genre songs",
+                "ytsearch:songs in the same style language as " + cleanTitle + " " + artist,
+                "ytsearch:best music genre like " + artist,
+                "ytsearch:similar genre playlist to " + cleanTitle,
+                "ytsearch:recommended songs like " + artist + " " + cleanTitle,
+                "ytsearch:" + artist + " radio mix official audio",
+                "ytsearch:popular genre songs like " + cleanTitle,
+                "ytsearch:more songs like " + artist,
+                "ytsearch:music similar to " + cleanTitle + " official audio",
+                "ytsearch:genre language songs like " + artist + " top tracks"
+        };
+
+        for (String query : searchQueries) {
+            try {
+                Thread.sleep(100);
+                logger.debug("[RandomPlay] Trying: {}", query);
+
+                List<AudioTrack> tracks = loadTracks(query);
+
+                if (tracks != null && !tracks.isEmpty()) {
+                    List<AudioTrack> validTracks = tracks.stream()
+                            .filter(track -> isValidAutoPlayTrack(track, referenceTrack))
+                            .sorted((a, b) -> Integer.compare(getAutoplayScore(b, artist), getAutoplayScore(a, artist)))
+                            .limit(20)
+                            .collect(java.util.stream.Collectors.toList());
+
+                    if (!validTracks.isEmpty()) {
+                        int top = Math.min(15, validTracks.size());
+                        AudioTrack selected = validTracks.get(new Random().nextInt(top));
+
+                        playedAutoplayUris.add(selected.getInfo().uri);
+                        if (playedAutoplayUris.size() > 500) {
+                            Iterator<String> it = playedAutoplayUris.iterator();
+                            if (it.hasNext()) {
+                                it.next();
+                                it.remove();
+                            }
+                        }
+
+                        logger.info("[RandomPlay] Found: \"{}\" by {} (Score: {})",
+                                selected.getInfo().title, selected.getInfo().author,
+                                getAutoplayScore(selected, artist));
+                        return selected;
+                    }
+                }
+            } catch (Exception e) {
+                logger.warn("RandomPlay search error for query {}: {}", query, e.toString());
+            }
+        }
+
+        try {
+            logger.info("[RandomPlay] Trying final fallback...");
+            List<AudioTrack> fallback = loadTracks("ytsearch:" + artist + " song official audio");
+            if (fallback != null) {
+                List<AudioTrack> validList = fallback.stream()
+                        .filter(t -> isValidAutoPlayTrack(t, referenceTrack))
+                        .collect(java.util.stream.Collectors.toList());
+                if (!validList.isEmpty()) {
+                    AudioTrack valid = validList.get(new Random().nextInt(validList.size()));
+                    playedAutoplayUris.add(valid.getInfo().uri);
+                    return valid;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        logger.info("[RandomPlay] No suitable tracks found.");
         return null;
     }
 
@@ -562,6 +644,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
     private boolean isValidAutoPlayTrack(AudioTrack track, AudioTrack reference) {
         String titleLower = track.getInfo().title.toLowerCase();
+        String authorLower = track.getInfo().author.toLowerCase();
 
         if (playedAutoplayUris.contains(track.getInfo().uri))
             return false;
@@ -582,13 +665,37 @@ public class TrackScheduler extends AudioEventAdapter {
         if (titleLower.contains("#short"))
             return false;
 
-        String[] keywords = {
+        // Blocked keywords - non-music content
+        String[] blockedKeywords = {
                 "podcast", "episode", "interview", "talk show", "review",
-                "reaction", "reacts to", "trailer", "tutorial", "how to",
-                "unboxing", "vlog", "behind the scenes", "explained"
+                "reaction", "reacts to", "reacting", "trailer", "tutorial",
+                "how to", "unboxing", "vlog", "behind the scenes", "explained",
+                "compilation", "asmr", "gameplay", "gaming", "playthrough",
+                "walkthrough", "let's play", "lets play", "stream highlights",
+                "funny moments", "top 10", "top 5", "top 20", "countdown",
+                "news", "breaking", "documentary", "lecture", "ted talk",
+                "audiobook", "chapter", "part 1", "part 2", "part 3",
+                "full movie", "full film", "full album", "hour mix",
+                "cooking", "recipe", "mukbang", "eating", "haul",
+                "prank", "challenge", "storytime", "story time",
+                "commentary", "essay", "analysis", "debate",
+                "motivational speech", "meditation", "sleep",
+                "rain sounds", "white noise", "relaxing",
+                "ambient", "lofi mix", "study music", "chill mix"
         };
-        for (String k : keywords) {
+        for (String k : blockedKeywords) {
             if (titleLower.contains(k))
+                return false;
+        }
+
+        // Blocked author patterns - non-music channels
+        String[] blockedAuthors = {
+                "ted", "tedx", "vox", "vice", "buzzfeed",
+                "mrbeast", "pewdiepie", "markiplier",
+                "cnn", "bbc news", "fox news"
+        };
+        for (String ba : blockedAuthors) {
+            if (authorLower.equals(ba))
                 return false;
         }
 
@@ -601,27 +708,51 @@ public class TrackScheduler extends AudioEventAdapter {
         String authorLower = track.getInfo().author.toLowerCase();
         String originalArtistLower = originalArtist.toLowerCase();
 
+        // Strong boost for same artist
         if (authorLower.contains(originalArtistLower) || originalArtistLower.contains(authorLower))
             score += 15;
 
-        if (titleLower.contains("official") || titleLower.contains("audio") || titleLower.contains("video") ||
-                authorLower.contains("vevo"))
+        // Official content is almost always a real song
+        if (titleLower.contains("official audio"))
+            score += 10;
+        else if (titleLower.contains("official music video") || titleLower.contains("official video"))
+            score += 8;
+        else if (titleLower.contains("official"))
             score += 5;
 
-        if (authorLower.contains("music") || authorLower.contains("records") || authorLower.contains("vevo"))
+        // VEVO and Topic channels are verified music channels
+        if (authorLower.contains("vevo"))
+            score += 10;
+        if (authorLower.endsWith(" - topic"))
+            score += 8;
+
+        // Music labels and music-related channel names
+        if (authorLower.contains("music") || authorLower.contains("records") || authorLower.contains("entertainment"))
+            score += 5;
+
+        // Positive song signals in the title
+        if (titleLower.contains("audio") || titleLower.contains("video"))
+            score += 3;
+        if (titleLower.contains("ft.") || titleLower.contains("feat.") || titleLower.contains("featuring"))
             score += 3;
 
-        if (!titleLower.contains("lyric") && !titleLower.contains("letra"))
+        // Non-lyric/non-visualizer videos are usually the real thing
+        if (!titleLower.contains("lyric") && !titleLower.contains("letra") && !titleLower.contains("visualizer"))
             score += 2;
 
+        // Penalize less desirable variants
         if (titleLower.contains("live") && !originalArtistLower.contains("live"))
             score -= 5;
-
         if (titleLower.contains("cover") && !originalArtistLower.contains("cover"))
             score -= 5;
-
         if (titleLower.contains("remix") && !originalArtistLower.contains("remix"))
-            score -= 5;
+            score -= 3;
+        if (titleLower.contains("slowed") || titleLower.contains("reverb") || titleLower.contains("sped up"))
+            score -= 4;
+        if (titleLower.contains("karaoke") || titleLower.contains("instrumental"))
+            score -= 3;
+        if (titleLower.contains("1 hour") || titleLower.contains("10 hour"))
+            score -= 10;
 
         return score;
     }
@@ -682,13 +813,15 @@ public class TrackScheduler extends AudioEventAdapter {
         currentTrack = null;
         loopMode = LoopMode.OFF;
         autoplay = false;
+        randomPlay = false;
         cancelPreload();
 
-        // Sync autoplay state back to persisted GuildSettings
+        // Sync autoplay and randomPlay state back to persisted GuildSettings
         try {
             com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(musicManager.getGuild().getId());
-            if (settings.isAutoplay()) {
+            if (settings.isAutoplay() || settings.isRandomPlay()) {
                 settings.setAutoplay(false);
+                settings.setRandomPlay(false);
                 com.discord.musicbot.data.GuildSettingsManager.getInstance().markDirty();
             }
         } catch (Exception ignored) {}
@@ -817,6 +950,25 @@ public class TrackScheduler extends AudioEventAdapter {
 
     public boolean isAutoPlay() {
         return autoplay;
+    }
+
+    public boolean isRandomPlay() {
+        return randomPlay;
+    }
+
+    public void setRandomPlay(boolean randomPlay) {
+        this.randomPlay = randomPlay;
+        try {
+            com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(musicManager.getGuild().getId());
+            settings.setRandomPlay(randomPlay);
+            com.discord.musicbot.data.GuildSettingsManager.getInstance().markDirty();
+        } catch (Exception ignored) {}
+        musicManager.notifySessionChanged();
+    }
+
+    public boolean toggleRandomPlay() {
+        setRandomPlay(!randomPlay);
+        return randomPlay;
     }
 
     public AudioTrack remove(int index) {

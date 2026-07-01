@@ -15,6 +15,7 @@ public class InsertCommand extends SlashCommand {
 
     @Override
     public void execute(CommandContext ctx) {
+        ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
         String query = ctx.getOption("query").getAsString();
         int pos = ctx.getOption("position").getAsInt() - 1;
         ctx.deferReply();
