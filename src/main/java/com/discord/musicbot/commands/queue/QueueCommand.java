@@ -52,8 +52,6 @@ public class QueueCommand extends SlashCommand {
         var userOpt = ctx.getOption("user");
         String filterUserId = userOpt != null ? userOpt.getAsString() : null;
         
-        var embed = EmbedHelper.createQueueEmbed(ctx.getMusicManager(), page, filterUserId);
-        
         long filteredSize = filterUserId == null ? ctx.getScheduler().getQueueSize() : 
             ctx.getScheduler().getQueue().stream().filter(t -> {
                 Object ud = t.getUserData();
@@ -65,11 +63,14 @@ public class QueueCommand extends SlashCommand {
                 }
                 return id.equals(filterUserId);
             }).count();
-            
-        int maxPages = Math.max(1, (int) Math.ceil(filteredSize / 10.0));
-        String prefix = filterUserId == null ? "queue" : "queue_" + filterUserId;
-        var components = EmbedHelper.createPaginationButtons(prefix, page, maxPages);
-        ctx.getEvent().replyEmbeds(embed).setComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(components)).queue();
+
+        if (filteredSize == 0) {
+            ctx.reply("No tracks in the queue.");
+            return;
+        }
+
+        var container = EmbedHelper.createQueueContainer(ctx.getMusicManager(), page, filterUserId);
+        ctx.getEvent().replyComponents(container).useComponentsV2().queue();
     }
 
     private void handleSearch(CommandContext ctx) {

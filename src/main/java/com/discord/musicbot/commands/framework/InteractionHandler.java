@@ -326,17 +326,12 @@ public class InteractionHandler {
             int maxPages = Math.max(1, (int) Math.ceil(filteredSize / 10.0));
             int newPage = calcNewPage(action, currentPage, maxPages);
     
-            MessageEmbed embed = EmbedHelper.createQueueEmbed(manager, newPage, filterUserId);
-            final int finalPage = newPage;
-            final String finalPrefix = filterUserId == null ? "queue" : "queue_" + filterUserId;
-            
-            event.deferEdit().queue(v -> {
-                event.getHook().editOriginalEmbeds(embed).setComponents(
-                        net.dv8tion.jda.api.components.actionrow.ActionRow.of(
-                                EmbedHelper.createPaginationButtons(finalPrefix, finalPage, maxPages)
-                        )
-                ).queue();
-            });
+            if (filteredSize == 0) {
+                event.reply("No tracks in the queue.").setEphemeral(true).queue();
+                return;
+            }
+            var container = EmbedHelper.createQueueContainer(manager, newPage, filterUserId);
+            event.editComponents(container).useComponentsV2().queue();
         } catch (NumberFormatException e) {
             event.reply("Invalid pagination data.").setEphemeral(true).queue();
         }
@@ -411,10 +406,12 @@ public class InteractionHandler {
                         .queue();
                 break;
             case "np_queue":
-                event.replyEmbeds(EmbedHelper.createQueueEmbed(manager, 1, null))
-                        .setComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
-                                EmbedHelper.createPaginationButtons("queue", 1, Math.max(1, (int) Math.ceil(manager.getScheduler().getQueueSize() / 10.0)))
-                        ))
+                if (manager.getScheduler().getQueueSize() == 0) {
+                    event.reply("No tracks in the queue.").setEphemeral(true).queue();
+                    break;
+                }
+                event.replyComponents(EmbedHelper.createQueueContainer(manager, 1, null))
+                        .useComponentsV2()
                         .setEphemeral(true)
                         .queue();
                 break;

@@ -15,6 +15,7 @@ import net.dv8tion.jda.api.components.buttons.Button;
 
 import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.container.ContainerChildComponent;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 
 import java.util.ArrayList;
@@ -99,12 +100,7 @@ public class EmbedHelper {
         return sb.toString();
     }
 
-    public static MessageEmbed createQueueEmbed(MusicManager manager, int page, String filterUserId) {
-        EmbedBuilder embed = new EmbedBuilder();
-        embed.setColor(COLOR_MAIN);
-        embed.setTitle(filterUserId != null ? "Queue (Filtered)" : "Queue");
-        embed.setTimestamp(java.time.Instant.now());
-
+    public static Container createQueueContainer(MusicManager manager, int page, String filterUserId) {
         List<AudioTrack> queue = new ArrayList<>(manager.getScheduler().getQueue());
         if (filterUserId != null) {
             queue.removeIf(t -> {
@@ -120,6 +116,10 @@ public class EmbedHelper {
         }
 
         int queueSize = queue.size();
+        if (queueSize == 0) {
+            return Container.of(TextDisplay.of("No tracks in the queue.")).withAccentColor(COLOR_MAIN);
+        }
+
         long totalDuration = queue.stream().mapToLong(AudioTrack::getDuration).sum();
         int maxPages = Math.max(1, (int) Math.ceil(queueSize / 10.0));
 
@@ -128,10 +128,9 @@ public class EmbedHelper {
 
         StringBuilder footer = new StringBuilder();
         footer.append("Page ").append(page).append("/").append(maxPages);
-        if (queueSize > 0) {
-            footer.append(" | ").append(queueSize).append(" track").append(queueSize != 1 ? "s" : "");
-            footer.append(" | ").append(formatDuration(totalDuration)).append(" total");
-        }
+        footer.append(" | ").append(queueSize).append(" track").append(queueSize != 1 ? "s" : "");
+        footer.append(" | ").append(formatDuration(totalDuration)).append(" total");
+
         if (!loopMode.equalsIgnoreCase("Off")) {
             footer.append(" | Loop: ").append(loopMode);
         }
@@ -144,50 +143,54 @@ public class EmbedHelper {
         else if (manager.getScheduler().isRandomPlay())
             footer.append(" | Random");
 
-        embed.setFooter(footer.toString());
+        StringBuilder content = new StringBuilder();
+        String title = filterUserId != null ? "Queue (Filtered)" : "Queue";
+        content.append("### ").append(title).append("\n\n");
 
-        StringBuilder description = new StringBuilder();
+        int start = (page - 1) * 10;
+        int end = Math.min(start + 10, queueSize);
 
-        if (queueSize > 0) {
-            int start = (page - 1) * 10;
-            int end = Math.min(start + 10, queueSize);
-
-            for (int i = start; i < end; i++) {
-                AudioTrack track = queue.get(i);
-                String title = track.getInfo().title;
-                if (title.length() > 30) {
-                    title = title.substring(0, 27) + "...";
-                }
-                
-                String url = track.getInfo().uri;
-                if (url == null) {
-                    url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(title, java.nio.charset.StandardCharsets.UTF_8);
-                } else if (url.startsWith("ytsearch:")) {
-                    url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(url.substring(9), java.nio.charset.StandardCharsets.UTF_8);
-                }
-                title = escapeMarkdown(title);
-                
-                String requester = "";
-                Object ud = track.getUserData();
-                if (ud instanceof net.dv8tion.jda.api.entities.User u) {
-                    requester = " - " + u.getAsMention();
-                } else if (ud instanceof String s) {
-                    if (s.contains("\"requester\":\"")) {
-                        String id = s.split("\"requester\":\"")[1].split("\"")[0];
-                        requester = " - <@" + id + ">";
-                    } else if (s.matches("\\d+")) {
-                        requester = " - <@" + s + ">";
-                    }
-                }
-                
-                description.append(String.format("%d. [**%s**](%s)%s\n", i + 1, title, url, requester));
+        for (int i = start; i < end; i++) {
+            AudioTrack track = queue.get(i);
+            String trackTitle = track.getInfo().title;
+            if (trackTitle.length() > 30) {
+                trackTitle = trackTitle.substring(0, 27) + "...";
             }
-        } else {
-            description.append("No tracks in queue");
+            
+            String url = track.getInfo().uri;
+            if (url == null) {
+                url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(trackTitle, java.nio.charset.StandardCharsets.UTF_8);
+            } else if (url.startsWith("ytsearch:")) {
+                url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(url.substring(9), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            trackTitle = escapeMarkdown(trackTitle);
+            
+            String requester = "";
+            Object ud = track.getUserData();
+            if (ud instanceof net.dv8tion.jda.api.entities.User u) {
+                requester = " - " + u.getAsMention();
+            } else if (ud instanceof String s) {
+                if (s.contains("\"requester\":\"")) {
+                    String id = s.split("\"requester\":\"")[1].split("\"")[0];
+                    requester = " - <@" + id + ">";
+                } else if (s.matches("\\d+")) {
+                    requester = " - <@" + s + ">";
+                }
+            }
+            
+            content.append(String.format("%d. [**%s**](%s)%s\n", i + 1, trackTitle, url, requester));
         }
 
-        embed.setDescription(description.toString());
-        return embed.build();
+        content.append("\n-# ").append(footer.toString());
+
+        List<ContainerChildComponent> children = new ArrayList<>();
+        children.add(TextDisplay.of(content.toString()));
+
+        String prefix = filterUserId == null ? "queue" : "queue_" + filterUserId;
+        List<Button> buttons = createPaginationButtons(prefix, page, maxPages);
+        children.add(ActionRow.of(buttons));
+
+        return Container.of(children).withAccentColor(COLOR_MAIN);
     }
 
     public static List<Button> createPaginationButtons(String idPrefix, int page, int maxPages) {

@@ -545,16 +545,20 @@ public class MusicManager {
         footer.append(String.format(" | Queue: %d tracks", scheduler.getQueue().size()));
 
         java.util.List<ContainerChildComponent> children = new java.util.ArrayList<>();
-        children.add(TextDisplay.of("### " + authorName + " | " + status));
 
         String artworkUrl = getArtworkUrl(track);
         if (artworkUrl != null && !artworkUrl.isBlank()) {
-            children.add(Section.of(Thumbnail.fromUrl(artworkUrl), TextDisplay.of(desc)));
+            children.add(Section.of(
+                    Thumbnail.fromUrl(artworkUrl),
+                    TextDisplay.of("### " + authorName + " | " + status),
+                    TextDisplay.of(desc),
+                    TextDisplay.of("-# " + footer.toString())
+            ));
         } else {
+            children.add(TextDisplay.of("### " + authorName + " | " + status));
             children.add(TextDisplay.of(desc));
+            children.add(TextDisplay.of("-# " + footer.toString()));
         }
-
-        children.add(TextDisplay.of("-# " + footer.toString()));
 
         java.util.List<ActionRow> rows = com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(this);
         children.addAll(rows);
