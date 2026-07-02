@@ -98,9 +98,8 @@ public class BotLauncher {
                                 PlayerManager.getInstance().shutdown();
                                 for (net.dv8tion.jda.api.entities.Guild guild : jda.getGuilds()) {
                                         try {
-                                                if (guild.getSelfMember().getVoiceState() != null && guild.getSelfMember().getVoiceState().inAudioChannel()) {
-                                                        guild.getAudioManager().closeAudioConnection();
-                                                }
+                                                guild.getAudioManager().closeAudioConnection();
+                                                jda.getDirectAudioController().disconnect(guild);
                                         } catch (Exception ignored) {}
                                 }
                                 com.discord.musicbot.data.SessionManager.getInstance().saveAllNow();

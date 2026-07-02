@@ -32,8 +32,16 @@ public class PlayerManager {
     private final DefaultAudioPlayerManager playerManager;
     private final Map<Long, MusicManager> musicManagers;
 
-    public static final java.util.concurrent.ExecutorService ioExecutor = java.util.concurrent.Executors.newCachedThreadPool();
-    public static final java.util.concurrent.ScheduledExecutorService scheduledExecutor = java.util.concurrent.Executors.newScheduledThreadPool(4);
+    public static final java.util.concurrent.ExecutorService ioExecutor = java.util.concurrent.Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "PlayerManager-IO");
+        t.setDaemon(true);
+        return t;
+    });
+    public static final java.util.concurrent.ScheduledExecutorService scheduledExecutor = java.util.concurrent.Executors.newScheduledThreadPool(4, r -> {
+        Thread t = new Thread(r, "PlayerManager-Scheduled");
+        t.setDaemon(true);
+        return t;
+    });
     public static volatile boolean isShuttingDown = false;
 
     private PlayerManager() {
@@ -136,6 +144,24 @@ public class PlayerManager {
 
     public void shutdown() {
         isShuttingDown = true;
+        logger.info("PlayerManager initiating robust shutdown across {} active sessions...", musicManagers.size());
+
+        // 1. Force save all session snapshots immediately before any destruction or connection closing
+        for (MusicManager manager : musicManagers.values()) {
+            try {
+                com.discord.musicbot.data.SessionManager.getInstance().updateSnapshot(manager.getGuild().getId(), manager.toSessionSnapshot());
+            } catch (Exception e) {
+                logger.warn("Failed to update snapshot for guild {} during pre-shutdown: {}", manager.getGuild().getId(), e.getMessage());
+            }
+        }
+        try {
+            com.discord.musicbot.data.SessionManager.getInstance().saveAllNow();
+            logger.info("All session activity and queues flushed to disk successfully.");
+        } catch (Exception e) {
+            logger.error("Failed to flush SessionManager during shutdown", e);
+        }
+
+        // 2. Perform cleanup and voice disconnection for each manager
         java.util.List<java.util.concurrent.CompletableFuture<Void>> futures = new java.util.ArrayList<>();
         for (MusicManager manager : musicManagers.values()) {
             futures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
@@ -158,6 +184,17 @@ public class PlayerManager {
         playerManager.shutdown();
         ioExecutor.shutdown();
         scheduledExecutor.shutdown();
+        try {
+            if (!ioExecutor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                ioExecutor.shutdownNow();
+            }
+            if (!scheduledExecutor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                scheduledExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            ioExecutor.shutdownNow();
+            scheduledExecutor.shutdownNow();
+        }
     }
 
     public int getActivePlayers() {

@@ -53,6 +53,7 @@ public class MusicManager {
     private int stallCount = 0;
     
     private volatile boolean isDeliberateDisconnect = false;
+    private volatile String activeVoiceChannelId = null;
     
     public void markDeliberateDisconnect() {
         this.isDeliberateDisconnect = true;
@@ -823,9 +824,12 @@ public class MusicManager {
         SessionSnapshot snapshot = new SessionSnapshot();
         snapshot.guildId = guild.getId();
         var voiceState = guild.getSelfMember().getVoiceState();
-        snapshot.voiceChannelId = voiceState != null && voiceState.getChannel() != null
-                ? voiceState.getChannel().getId()
-                : null;
+        if (voiceState != null && voiceState.getChannel() != null) {
+            activeVoiceChannelId = voiceState.getChannel().getId();
+        } else if (guild.getAudioManager().getConnectedChannel() != null) {
+            activeVoiceChannelId = guild.getAudioManager().getConnectedChannel().getId();
+        }
+        snapshot.voiceChannelId = activeVoiceChannelId;
         snapshot.textChannelId = nowPlayingChannelId;
 
         AudioTrack current = scheduler.getCurrentTrack();
@@ -876,6 +880,7 @@ public class MusicManager {
     }
 
     public void restoreFromSnapshot(SessionSnapshot snapshot) {
+        this.activeVoiceChannelId = snapshot.voiceChannelId;
         if (snapshot.voiceChannelId != null) {
             net.dv8tion.jda.api.entities.channel.middleman.AudioChannel vc = guild
                     .getVoiceChannelById(snapshot.voiceChannelId);
@@ -1031,6 +1036,12 @@ public class MusicManager {
             logger.warn("Failed to force save session: {}", e.getMessage());
         }
 
+        // Send voice disconnection opcode immediately over WebSocket before blocking on REST API calls
+        try {
+            guild.getAudioManager().closeAudioConnection();
+            guild.getJDA().getDirectAudioController().disconnect(guild);
+        } catch (Exception ignored) {}
+
         // Clear Voice Channel Status with a timeout
         try {
             var voiceState = guild.getSelfMember().getVoiceState();
@@ -1055,10 +1066,6 @@ public class MusicManager {
         } catch (Exception e) {
             logger.warn("Failed to delete NP message on shutdown: {}", e.getMessage());
         }
-
-        try {
-            guild.getAudioManager().closeAudioConnection();
-        } catch (Exception ignored) {}
 
         cancelIdleTimeout();
         if (aloneTask != null) aloneTask.cancel(true);
