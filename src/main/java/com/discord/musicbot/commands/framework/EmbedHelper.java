@@ -5,9 +5,7 @@ import com.discord.musicbot.data.model.PlaylistData;
 import com.discord.musicbot.data.model.PlaylistTrack;
 import com.discord.musicbot.data.model.GuildSettings;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
-import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.emoji.Emoji;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 
@@ -245,26 +243,17 @@ public class EmbedHelper {
     }
 
 
-    public static MessageEmbed createHelpEmbed(String category, String prefix, JDA jda) {
-        EmbedBuilder embed = new EmbedBuilder()
-                .setColor(COLOR_MAIN)
-                .setTitle("Music Commands")
-                .setTimestamp(java.time.Instant.now())
-                .setFooter("Slash Commands Supported");
-
-        if (category.equals("home")) {
-            embed.setThumbnail(BOT_LOGO_URL);
-        }
-
+    public static Container createHelpContainer(String category, String prefix, JDA jda) {
         StringBuilder description = new StringBuilder();
 
         if (category.equals("home")) {
-            embed.setTitle(jda.getSelfUser().getName() + " Music");
+            description.append("### ").append(jda.getSelfUser().getName()).append(" Music\n\n");
             description.append("A simple music bot supporting **Spotify**, **YouTube**, and **SoundCloud**.\n\n");
             description.append("**").append(com.discord.musicbot.config.EmojiConfig.getInstance().mewsic).append(" Official Mewsic Collaboration**\n");
             description.append("This bot is integrated with the offline Mewsic app. You can play your Mewsic playlists seamlessly using `/mewsic play` and `/mewsic import`.\n\n");
             description.append("Use the dropdown below to explore the available commands.");
         } else if (category.equals("playback")) {
+            description.append("### Playback Commands\n\n");
             description.append(String.format("**%splay <song/url>** - Play a song or add it to the queue.\n\n", prefix));
             description.append(String.format("**%splayinstant <song/url>** - Play a song immediately, skipping the current track.\n\n", prefix));
             description.append(String.format("**%splaynext <song/url>** - Add a song to the top of the queue.\n\n", prefix));
@@ -287,6 +276,7 @@ public class EmbedHelper {
             description.append(String.format("**%scrossfade [duration]** - Enable PCM crossfading between tracks.\n\n", prefix));
             description.append(String.format("**%s247 [lock]** - Keep the bot in the voice channel 24/7.\n", prefix));
         } else if (category.equals("queue")) {
+            description.append("### Queue Commands\n\n");
             description.append(String.format("**%squeue show [page] [user]** - View all tracks in the current queue.\n\n", prefix));
             description.append(String.format("**%squeue search <query>** - Search for a specific track within the queue.\n\n", prefix));
             description.append(String.format("**%squeue deduplicate** - Scan and remove any duplicate entries.\n\n", prefix));
@@ -308,6 +298,7 @@ public class EmbedHelper {
             description.append(String.format("**%sjump <number>** - Skip directly to a specific track in the queue.\n\n", prefix));
             description.append(String.format("**%sremovedupes** - Remove duplicate tracks from the queue.\n", prefix));
         } else if (category.equals("playlists")) {
+            description.append("### Playlist & Favorites Commands\n\n");
             description.append(String.format("**%splaylist create <name>** - Create a new playlist.\n\n", prefix));
             description.append(String.format("**%splaylist list** - View your playlists.\n\n", prefix));
             description.append(String.format("**%splaylist play <name>** - Play a playlist.\n\n", prefix));
@@ -317,9 +308,11 @@ public class EmbedHelper {
             description.append(String.format("**%sfavorites list** - View your favorites.\n\n", prefix));
             description.append(String.format("**%sfavorites play** - Play your favorites.\n", prefix));
         } else if (category.equals("mewsic")) {
+            description.append("### Mewsic Commands\n\n");
             description.append(String.format("**%smewsic import <file>** - Import a Mewsic playlist JSON file.\n\n", prefix));
             description.append(String.format("**%smewsic export <playlist>** - Export a Melora playlist to Mewsic JSON format.\n", prefix));
         } else if (category.equals("settings")) {
+            description.append("### Settings & Utility Commands\n\n");
             description.append(String.format("**%svolume <1-200>** - Adjust the playback volume.\n\n", prefix));
             description.append(String.format("**%ssettings** - (Admin) Open the server configuration dashboard.\n\n", prefix));
             description.append(String.format("**%sseek <time>** - Jump to a specific timestamp in the track.\n\n", prefix));
@@ -335,20 +328,16 @@ public class EmbedHelper {
             description.append(String.format("**%sgrab** - Send the currently playing track to your Direct Messages.\n\n", prefix));
             description.append(String.format("**%sping** - Check bot latency.\n", prefix));
         } else {
-            description.append("Command not found. Use `" + prefix + "help` to see all commands.");
-            embed.setColor(java.awt.Color.RED);
+            description.append("### Error\n\nCommand not found. Use `" + prefix + "help` to see all commands.");
         }
 
-        embed.setDescription(description.toString());
-        return embed.build();
+        return Container.of(
+                TextDisplay.of(description.toString()),
+                createHelpMenu()
+        ).withAccentColor(COLOR_MAIN);
     }
 
-    public static MessageEmbed createCommandHelpEmbed(String commandName, String prefix, JDA jda) {
-        EmbedBuilder embed = new EmbedBuilder()
-                .setColor(COLOR_MAIN)
-                .setTitle("Command: " + commandName)
-                .setTimestamp(java.time.Instant.now());
-
+    public static Container createCommandHelpContainer(String commandName, String prefix, JDA jda) {
         String description;
         switch (commandName) {
             case "play": description = "Play a song or add it to the queue.\n\n**Usage:** `" + prefix + "play <song/url>`"; break;
@@ -431,17 +420,12 @@ public class EmbedHelper {
             case "grab": description = "Send the currently playing track to your Direct Messages.\n\n**Usage:** `" + prefix + "grab`"; break;
             case "filter": description = "Apply an audio filter to the playback.\n\n**Filters:** `bassboost`, `earrape`, `pop`, `rock`, `electronic`, `nightcore`, `vaporwave`, `8d`, `tremolo`, `vibrato`, `distortion`, `muffled`, `vocal_remove`, `mono`, `clear`\n\n**Usage:** `" + prefix + "filter <filter>`"; break;
             case "settings": description = "Open the server configuration dashboard to toggle bot behaviors (Admin only).\n\n**Usage:** `" + prefix + "settings`"; break;
-            default: description = "Command not found. Use `" + prefix + "help` to see all commands."; embed.setColor(java.awt.Color.RED); break;
+            default: description = "Command not found. Use `" + prefix + "help` to see all commands."; break;
         }
 
-        embed.setDescription(description);
-        return embed.build();
-    }
-
-    public static Container createCommandHelpContainer(String commandName, String prefix, JDA jda) {
-        MessageEmbed embed = createCommandHelpEmbed(commandName, prefix, jda);
-        String title = embed.getTitle() != null ? embed.getTitle() : "Command: " + commandName;
-        return Container.of(TextDisplay.of("### " + title + "\n" + embed.getDescription())).withAccentColor(COLOR_MAIN);
+        return Container.of(
+                TextDisplay.of("### Command: " + commandName + "\n\n" + description)
+        ).withAccentColor(COLOR_MAIN);
     }
 
     public static ActionRow createHelpMenu() {

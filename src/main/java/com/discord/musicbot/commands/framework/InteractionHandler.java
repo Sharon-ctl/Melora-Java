@@ -7,7 +7,6 @@ import com.discord.musicbot.data.PlaylistManager;
 import com.discord.musicbot.data.model.PlaylistData;
 import com.discord.musicbot.data.model.PlaylistTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 
@@ -458,8 +457,8 @@ public class InteractionHandler {
             if (event.getComponentId().equals("help_menu")) {
                 String category = event.getValues().get(0);
                 String prefix = "/";
-                MessageEmbed embed = EmbedHelper.createHelpEmbed(category, prefix, event.getJDA());
-                event.editMessageEmbeds(embed).queue();
+                var container = EmbedHelper.createHelpContainer(category, prefix, event.getJDA());
+                event.editComponents(container).useComponentsV2().queue();
             } else if (event.getComponentId().startsWith("search_")) {
                 String[] parts = event.getComponentId().split("_", 3);
                 if (parts.length < 3) return;
