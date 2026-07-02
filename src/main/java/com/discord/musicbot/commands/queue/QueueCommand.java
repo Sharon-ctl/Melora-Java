@@ -70,7 +70,7 @@ public class QueueCommand extends SlashCommand {
         }
 
         var container = EmbedHelper.createQueueContainer(ctx.getMusicManager(), page, filterUserId);
-        ctx.getEvent().replyComponents(container).useComponentsV2().queue();
+        ctx.getEvent().replyComponents(container).useComponentsV2().setAllowedMentions(java.util.Collections.emptyList()).queue();
     }
 
     private void handleSearch(CommandContext ctx) {

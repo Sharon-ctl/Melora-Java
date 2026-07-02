@@ -179,13 +179,7 @@ public class EmbedHelper {
             }
             
             if (requesterId != null) {
-                net.dv8tion.jda.api.entities.Member m = manager.getGuild().getMemberById(requesterId);
-                if (m != null) {
-                    requester = " - " + m.getEffectiveName();
-                } else {
-                    net.dv8tion.jda.api.entities.User u = manager.getGuild().getJDA().getUserById(requesterId);
-                    if (u != null) requester = " - " + u.getName();
-                }
+                requester = " - <@" + requesterId + ">";
             }
             
             content.append(String.format("%d. [**%s**](%s)%s\n", i + 1, trackTitle, url, requester));

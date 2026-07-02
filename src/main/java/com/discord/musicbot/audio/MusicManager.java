@@ -465,6 +465,7 @@ public class MusicManager {
             if (nowPlayingMessageId != null) {
                 channel.editMessageComponentsById(nowPlayingMessageId, container)
                         .useComponentsV2()
+                        .setAllowedMentions(java.util.Collections.emptyList())
                         .queue(success -> isSendingNowPlaying = false, e -> {
                             nowPlayingMessageId = null;
                             try {
@@ -523,14 +524,7 @@ public class MusicManager {
         }
 
         if (requesterId != null) {
-            net.dv8tion.jda.api.entities.Member m = guild.getMemberById(requesterId);
-            if (m != null) {
-                requester = m.getEffectiveName();
-            } else {
-                net.dv8tion.jda.api.entities.User u = guild.getJDA().getUserById(requesterId);
-                if (u != null) requester = u.getName();
-                else requester = "Unknown";
-            }
+            requester = "<@" + requesterId + ">";
         }
 
         boolean isPaused = scheduler.isPaused();

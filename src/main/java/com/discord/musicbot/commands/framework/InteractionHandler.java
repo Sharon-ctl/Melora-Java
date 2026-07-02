@@ -394,6 +394,7 @@ public class InteractionHandler {
                 event.replyComponents(EmbedHelper.createQueueContainer(manager, 1, null))
                         .useComponentsV2()
                         .setEphemeral(true)
+                        .setAllowedMentions(java.util.Collections.emptyList())
                         .queue();
                 break;
             case "np_voldown":
