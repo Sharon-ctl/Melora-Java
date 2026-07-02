@@ -1063,9 +1063,7 @@ public class MusicManager {
         }
 
         try {
-            if (guild.getAudioManager().isConnected()) {
-                guild.getAudioManager().closeAudioConnection();
-            }
+            guild.getAudioManager().closeAudioConnection();
         } catch (Exception ignored) {}
 
         cancelIdleTimeout();

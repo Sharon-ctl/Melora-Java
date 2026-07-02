@@ -74,7 +74,7 @@ public class VoiceEventHandler extends ListenerAdapter {
                     } catch (Exception ignored) {}
                 }
                 if (tc != null) {
-                    if (manager == null || !manager.isDeliberateDisconnect()) {
+                    if (manager != null && !manager.isDeliberateDisconnect()) {
                         String desc = "☹️ I was forcefully disconnected! My queue has been cleared.";
                         var container = net.dv8tion.jda.api.components.container.Container.of(
                             net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(desc)
