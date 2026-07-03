@@ -27,8 +27,15 @@ public class SavedQueueManager {
     private final ConcurrentHashMap<String, UserSavedQueuesStore> cache;
     private final ConcurrentHashMap<String, ReentrantLock> userLocks;
     private final File dir;
+    private final java.util.concurrent.ExecutorService saveExecutor;
 
     private SavedQueueManager() {
+        this.saveExecutor = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r);
+            t.setDaemon(true);
+            t.setName("SavedQueue-Save-Thread");
+            return t;
+        });
         this.mapper = new ObjectMapper();
         this.mapper.enable(SerializationFeature.INDENT_OUTPUT);
         this.cache = new ConcurrentHashMap<>();
@@ -81,18 +88,20 @@ public class SavedQueueManager {
 
     private void saveStore(UserSavedQueuesStore store) {
         String userId = store.getUserId();
-        ReentrantLock lock = getLock(userId);
-        lock.lock();
-        try {
-            File file = getFile(userId);
-            File temp = new File(dir, userId + ".tmp");
-            mapper.writeValue(temp, store);
-            Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
-            logger.error("Failed to save saved queues for " + userId, e);
-        } finally {
-            lock.unlock();
-        }
+        saveExecutor.submit(() -> {
+            ReentrantLock lock = getLock(userId);
+            lock.lock();
+            try {
+                File file = getFile(userId);
+                File temp = new File(dir, userId + ".tmp");
+                mapper.writeValue(temp, store);
+                Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException e) {
+                logger.error("Failed to save saved queues for " + userId, e);
+            } finally {
+                lock.unlock();
+            }
+        });
     }
 
     public List<SavedQueue> getSavedQueues(String userId) {

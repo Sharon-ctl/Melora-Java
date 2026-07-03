@@ -44,7 +44,7 @@ public class EmojiConfig {
     
     public String enabled = "<:success1:1461351761607393453>";
     public String disabled = "<:error1:1461351972924817552>";
-    public String settings = "⚙️";
+    public String settings = "<:settings1:1461362482869174416>";
 
     private static EmojiConfig instance;
 

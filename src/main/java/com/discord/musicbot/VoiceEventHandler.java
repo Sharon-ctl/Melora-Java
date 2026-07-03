@@ -75,7 +75,7 @@ public class VoiceEventHandler extends ListenerAdapter {
                 }
                 if (tc != null) {
                     if (manager != null && !manager.isDeliberateDisconnect()) {
-                        String desc = "☹️ I was forcefully disconnected! My queue has been cleared.";
+                        String desc = com.discord.musicbot.config.EmojiConfig.getInstance().error + " I was forcefully disconnected! My queue has been cleared.";
                         var container = net.dv8tion.jda.api.components.container.Container.of(
                             net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(desc)
                         ).withAccentColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN);

@@ -516,6 +516,40 @@ public class InteractionHandler {
                 ).withAccentColor(EmbedHelper.COLOR_MAIN))
                     .useComponentsV2()
                     .queue();
+            } else if (event.getComponentId().startsWith("clear_data_")) {
+                String userId = event.getComponentId().substring("clear_data_".length());
+                if (!event.getUser().getId().equals(userId)) {
+                    event.reply("This menu is not for you!").setEphemeral(true).queue();
+                    return;
+                }
+                List<String> values = event.getValues();
+                StringBuilder deletedItems = new StringBuilder();
+                boolean deleteAll = values.contains("all");
+
+                if (deleteAll || values.contains("history")) {
+                    com.discord.musicbot.data.HistoryManager.getInstance().clearHistory(userId);
+                    deletedItems.append("• Listening History\n");
+                }
+                if (deleteAll || values.contains("playlists")) {
+                    com.discord.musicbot.data.PlaylistManager.getInstance().clearPlaylists(userId);
+                    deletedItems.append("• Playlists\n");
+                }
+                if (deleteAll || values.contains("favorites")) {
+                    com.discord.musicbot.data.PlaylistManager.getInstance().clearFavorites(userId);
+                    deletedItems.append("• Favorites\n");
+                }
+                if (deleteAll || values.contains("stats")) {
+                    com.discord.musicbot.data.StatsManager.getInstance().clearStats(userId);
+                    deletedItems.append("• Stats & Wrapped Data\n");
+                }
+                if (deleteAll || values.contains("excludes")) {
+                    com.discord.musicbot.data.UserExcludeManager.getInstance().clearExcludes(userId);
+                    deletedItems.append("• Excluded Users\n");
+                }
+
+                event.editComponents(Container.of(
+                    TextDisplay.of(EmbedHelper.MSG_SUCCESS + " **Successfully cleared selected data:**\n\n" + deletedItems.toString())
+                ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             }
         } catch (Exception e) {
             org.slf4j.LoggerFactory.getLogger(InteractionHandler.class).error("Error in handleSelectMenu", e);

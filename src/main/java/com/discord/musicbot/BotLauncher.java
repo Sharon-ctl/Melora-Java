@@ -77,6 +77,7 @@ public class BotLauncher {
                         registry.register(new com.discord.musicbot.commands.user.WrappedCommand());
                         registry.register(new com.discord.musicbot.commands.user.SavedQueueCommand());
                         registry.register(new com.discord.musicbot.commands.user.HistoryCommand());
+                        registry.register(new com.discord.musicbot.commands.user.ExcludeCommand());
                         
                         registry.register(new com.discord.musicbot.commands.playlist.PlaylistCommand());
                         registry.register(new com.discord.musicbot.commands.favorites.FavoritesCommand());

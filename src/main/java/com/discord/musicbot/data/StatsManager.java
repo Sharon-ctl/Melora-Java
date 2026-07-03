@@ -22,8 +22,15 @@ public class StatsManager {
     private final ObjectMapper mapper;
     private final File statsDir;
     private final Map<String, UserStats> cache;
+    private final java.util.concurrent.ExecutorService saveExecutor;
 
     private StatsManager() {
+        this.saveExecutor = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r);
+            t.setDaemon(true);
+            t.setName("Stats-Save-Thread");
+            return t;
+        });
         this.mapper = new ObjectMapper();
         this.mapper.enable(SerializationFeature.INDENT_OUTPUT);
         this.statsDir = new File(STATS_DIR);
@@ -95,7 +102,7 @@ public class StatsManager {
     private void scheduleSave(String userId) {
         UserStats stats = cache.get(userId);
         if (stats != null) {
-            saveUserStats(userId, stats);
+            saveExecutor.submit(() -> saveUserStats(userId, stats));
         }
     }
 

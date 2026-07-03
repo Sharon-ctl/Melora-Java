@@ -23,10 +23,17 @@ public class HistoryManager {
     private final ObjectMapper mapper;
     private final File historyDir;
     private final Map<String, List<HistoryEntry>> cache;
+    private final java.util.concurrent.ExecutorService saveExecutor;
 
     private static HistoryManager instance;
 
     private HistoryManager() {
+        this.saveExecutor = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r);
+            t.setDaemon(true);
+            t.setName("History-Save-Thread");
+            return t;
+        });
         this.mapper = new ObjectMapper();
         this.mapper.enable(SerializationFeature.INDENT_OUTPUT);
         this.historyDir = new File(HISTORY_DIR);
@@ -101,7 +108,11 @@ public class HistoryManager {
     private void scheduleSave(String userId) {
         List<HistoryEntry> history = cache.get(userId);
         if (history != null) {
-            saveUserHistory(userId, history);
+            List<HistoryEntry> snapshot;
+            synchronized (this) {
+                snapshot = new ArrayList<>(history);
+            }
+            saveExecutor.submit(() -> saveUserHistory(userId, snapshot));
         }
     }
 

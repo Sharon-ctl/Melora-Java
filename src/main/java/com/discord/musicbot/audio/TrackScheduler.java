@@ -44,6 +44,7 @@ public class TrackScheduler extends AudioEventAdapter {
     private volatile boolean primaryIsActive = true;
     private volatile boolean crossfadeFired = false;
     private final java.util.concurrent.ScheduledFuture<?> crossfadeTask;
+    private final java.util.Set<String> currentlyExcludedMemberIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public TrackScheduler(AudioPlayer player, AudioPlayer secondaryPlayer, MusicManager musicManager) {
         this.player = player;
@@ -54,6 +55,51 @@ public class TrackScheduler extends AudioEventAdapter {
         this.playbackGeneration = new AtomicInteger(0);
 
         this.crossfadeTask = PlayerManager.scheduledExecutor.scheduleAtFixedRate(this::checkCrossfade, 1, 1, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    private void applyExclusions(String requesterId) {
+        if (requesterId == null) return;
+        net.dv8tion.jda.api.entities.Guild guild = musicManager.getGuild();
+        if (guild == null || !guild.getSelfMember().hasPermission(net.dv8tion.jda.api.Permission.VOICE_DEAF_OTHERS)) return;
+        net.dv8tion.jda.api.entities.channel.middleman.AudioChannel channel = guild.getSelfMember().getVoiceState() != null ? guild.getSelfMember().getVoiceState().getChannel() : null;
+        if (channel == null) return;
+
+        java.util.Set<String> excluded = com.discord.musicbot.data.UserExcludeManager.getInstance().getExcludes(requesterId);
+        if (excluded.isEmpty()) return;
+
+        for (net.dv8tion.jda.api.entities.Member member : channel.getMembers()) {
+            if (excluded.contains(member.getId()) && !member.getUser().isBot() && !member.getId().equals(requesterId)) {
+                net.dv8tion.jda.api.entities.GuildVoiceState vs = member.getVoiceState();
+                if (vs != null && !vs.isDeafened() && guild.getSelfMember().canInteract(member)) {
+                    guild.deafen(member, true).queue(
+                            s -> currentlyExcludedMemberIds.add(member.getId()),
+                            e -> logger.warn("Failed to server-deafen excluded user {}: {}", member.getId(), e.getMessage())
+                    );
+                }
+            }
+        }
+    }
+
+    private void removeExclusions() {
+        if (currentlyExcludedMemberIds.isEmpty()) return;
+        net.dv8tion.jda.api.entities.Guild guild = musicManager.getGuild();
+        if (guild == null || !guild.getSelfMember().hasPermission(net.dv8tion.jda.api.Permission.VOICE_DEAF_OTHERS)) {
+            currentlyExcludedMemberIds.clear();
+            return;
+        }
+        for (String memberId : new java.util.HashSet<>(currentlyExcludedMemberIds)) {
+            net.dv8tion.jda.api.entities.Member member = guild.getMemberById(memberId);
+            if (member != null) {
+                net.dv8tion.jda.api.entities.GuildVoiceState vs = member.getVoiceState();
+                if (vs != null && vs.isGuildDeafened() && guild.getSelfMember().canInteract(member)) {
+                    guild.deafen(member, false).queue(
+                            s -> {},
+                            e -> logger.warn("Failed to server-undeafen user {}: {}", memberId, e.getMessage())
+                    );
+                }
+            }
+        }
+        currentlyExcludedMemberIds.clear();
     }
 
     public AudioPlayer getActivePlayer() {
@@ -131,6 +177,28 @@ public class TrackScheduler extends AudioEventAdapter {
             com.discord.musicbot.data.HistoryManager.getInstance().addEntry(
                     track.getInfo().title, track.getInfo().uri, track.getInfo().author, track.getDuration(), lastRequesterId);
         }
+
+        java.util.Set<String> newExcludes = lastRequesterId != null ? com.discord.musicbot.data.UserExcludeManager.getInstance().getExcludes(lastRequesterId) : java.util.Collections.emptySet();
+        if (!currentlyExcludedMemberIds.isEmpty()) {
+            net.dv8tion.jda.api.entities.Guild guild = musicManager.getGuild();
+            if (guild != null && guild.getSelfMember().hasPermission(net.dv8tion.jda.api.Permission.VOICE_DEAF_OTHERS)) {
+                for (String memberId : new java.util.HashSet<>(currentlyExcludedMemberIds)) {
+                    if (!newExcludes.contains(memberId)) {
+                        net.dv8tion.jda.api.entities.Member member = guild.getMemberById(memberId);
+                        if (member != null) {
+                            net.dv8tion.jda.api.entities.GuildVoiceState vs = member.getVoiceState();
+                            if (vs != null && vs.isGuildDeafened() && guild.getSelfMember().canInteract(member)) {
+                                guild.deafen(member, false).queue();
+                            }
+                        }
+                        currentlyExcludedMemberIds.remove(memberId);
+                    }
+                }
+            } else {
+                currentlyExcludedMemberIds.clear();
+            }
+        }
+        applyExclusions(lastRequesterId);
 
         if (autoplay && queue.isEmpty()) {
             AudioTrack seed = track;
@@ -821,6 +889,7 @@ public class TrackScheduler extends AudioEventAdapter {
         autoplay = false;
         randomPlay = false;
         cancelPreload();
+        removeExclusions();
 
         // Sync autoplay and randomPlay state back to persisted GuildSettings
         try {
@@ -1188,6 +1257,9 @@ public class TrackScheduler extends AudioEventAdapter {
             } else {
                 nextTrack();
             }
+        }
+        if (currentTrack == null || !endReason.mayStartNext) {
+            removeExclusions();
         }
     }
 

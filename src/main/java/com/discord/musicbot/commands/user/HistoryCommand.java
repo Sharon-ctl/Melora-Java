@@ -33,10 +33,23 @@ public class HistoryCommand extends SlashCommand {
 
         if (sub.equals("clear")) {
             String userId = ctx.getUser().getId();
-            HistoryManager.getInstance().clearHistory(userId);
-            com.discord.musicbot.data.StatsManager.getInstance().clearStats(userId);
-            com.discord.musicbot.data.PlaylistManager.getInstance().deleteAllUserData(userId);
-            ctx.replySuccess("All of your user data (history, stats, wrapped, playlists, and favorites) has been permanently cleared.");
+            net.dv8tion.jda.api.components.selections.StringSelectMenu menu =
+                    net.dv8tion.jda.api.components.selections.StringSelectMenu.create("clear_data_" + userId)
+                            .setPlaceholder("Select user data to delete (can select multiple)...")
+                            .setMinValues(1)
+                            .setMaxValues(6)
+                            .addOption("Listening History", "history", "Delete your listening history")
+                            .addOption("Playlists", "playlists", "Delete all your custom playlists")
+                            .addOption("Favorites", "favorites", "Delete your liked/favorite tracks")
+                            .addOption("Stats & Wrapped", "stats", "Delete your listening stats and wrapped data")
+                            .addOption("Excluded Users", "excludes", "Clear your per-user exclusion list")
+                            .addOption("All User Data", "all", "Permanently wipe all of your stored data")
+                            .build();
+
+            ctx.getEvent().reply(com.discord.musicbot.config.EmojiConfig.getInstance().error + " **Select the data you wish to permanently delete:**")
+                    .addComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(menu))
+                    .setEphemeral(true)
+                    .queue();
         }
     }
 
@@ -48,10 +61,10 @@ public class HistoryCommand extends SlashCommand {
 
     @Override
     public CommandData getCommandData() {
-        return Commands.slash(getName(), "View or clear your listening history")
+        return Commands.slash(getName(), "View or manage your user data and listening history")
                 .addSubcommands(
                         new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("view", "View your recent history"),
-                        new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("clear", "Clear your listening history")
+                        new net.dv8tion.jda.api.interactions.commands.build.SubcommandData("clear", "Select user data (history, playlists, etc.) to clear")
                 );
     }
 }

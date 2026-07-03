@@ -41,8 +41,15 @@ public class PlaylistManager {
     private final Map<String, UserPlaylistStore> cache;
     private final ConcurrentHashMap<String, ReentrantLock> userLocks;
     private final File playlistsDir;
+    private final java.util.concurrent.ExecutorService saveExecutor;
 
     private PlaylistManager() {
+        this.saveExecutor = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r);
+            t.setDaemon(true);
+            t.setName("Playlist-Save-Thread");
+            return t;
+        });
         this.mapper = new ObjectMapper();
         this.mapper.enable(SerializationFeature.INDENT_OUTPUT);
         this.cache = Collections.synchronizedMap(new LinkedHashMap<String, UserPlaylistStore>(1000, 0.75f, true) {
@@ -105,15 +112,21 @@ public class PlaylistManager {
     }
 
     private void saveStoreData(String userId, UserPlaylistStore store) {
-        try {
-            File tempFile = new File(playlistsDir, userId + ".json.tmp");
-            File actualFile = getUserFile(userId);
-            mapper.writeValue(tempFile, store);
-            Files.move(tempFile.toPath(), actualFile.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
-            logger.error("Failed to save playlist store for user {}", userId, e);
-        }
+        saveExecutor.submit(() -> {
+            ReentrantLock lock = getUserLock(userId);
+            lock.lock();
+            try {
+                File tempFile = new File(playlistsDir, userId + ".json.tmp");
+                File actualFile = getUserFile(userId);
+                mapper.writeValue(tempFile, store);
+                Files.move(tempFile.toPath(), actualFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException e) {
+                logger.error("Failed to save playlist store for user {}", userId, e);
+            } finally {
+                lock.unlock();
+            }
+        });
     }
 
     private void saveUserStore(String userId) {
@@ -506,6 +519,23 @@ public class PlaylistManager {
             int count = fav.getTracks().size();
             fav.getTracks().clear();
             fav.setUpdatedAt(System.currentTimeMillis());
+            saveUserStore(userId);
+            return count;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Clear all custom playlists for a user.
+     */
+    public int clearPlaylists(String userId) {
+        ReentrantLock lock = getUserLock(userId);
+        lock.lock();
+        try {
+            UserPlaylistStore store = loadUserStore(userId);
+            int count = store.getPlaylists().size();
+            store.getPlaylists().clear();
             saveUserStore(userId);
             return count;
         } finally {
