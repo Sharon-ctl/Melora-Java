@@ -2,7 +2,6 @@ package com.discord.musicbot.commands.music;
 
 import com.discord.musicbot.audio.MusicManager;
 import com.discord.musicbot.commands.framework.CommandContext;
-import com.discord.musicbot.commands.framework.EmbedHelper;
 import com.discord.musicbot.commands.framework.SlashCommand;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
@@ -35,10 +34,10 @@ public class FilterCommand extends SlashCommand {
             manager.getFilterManager().applyFilter(type);
             
             if (type.equals("clear") || type.equals("none")) {
-                ctx.getEvent().reply(EmbedHelper.MSG_SUCCESS + " Cleared all audio filters!").queue();
+                ctx.replySuccess("Cleared all audio filters!");
             } else {
                 String capitalized = type.substring(0, 1).toUpperCase() + type.substring(1);
-                ctx.getEvent().reply(EmbedHelper.MSG_SUCCESS + " Enabled **" + capitalized + "** filter!").queue();
+                ctx.replySuccess("Enabled **" + capitalized + "** filter!");
             }
         } catch (Exception e) {
             logger.error("Failed to apply filter: {}", type, e);

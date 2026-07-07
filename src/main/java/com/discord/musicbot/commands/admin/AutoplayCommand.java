@@ -48,7 +48,9 @@ public class AutoplayCommand extends SlashCommand {
 
         if (history.isEmpty()) {
             try {
-                ctx.getChannel().sendMessage(EmbedHelper.MSG_ERROR + " You have no listening history to seed autoplay from. Play a song first!").queue();
+                ctx.getChannel().sendMessageComponents(
+                    net.dv8tion.jda.api.components.container.Container.of(net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(EmbedHelper.MSG_ERROR + " You have no listening history to seed autoplay from. Play a song first!")).withAccentColor(EmbedHelper.COLOR_MAIN)
+                ).useComponentsV2().queue();
             } catch (Exception ignored) {}
             return;
         }
@@ -64,7 +66,7 @@ public class AutoplayCommand extends SlashCommand {
         if (seed.uri != null && seed.uri.startsWith("http")) {
             query = seed.uri;
         } else {
-            query = "ytmsearch:" + seed.author + " " + seed.title;
+            query = seed.title + " " + seed.author;
         }
 
         PlayerManager.getInstance().loadAndPlay(ctx.getEvent(), query);

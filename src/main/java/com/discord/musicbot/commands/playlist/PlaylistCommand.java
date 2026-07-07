@@ -94,8 +94,11 @@ public class PlaylistCommand extends SlashCommand {
         PlaylistData pl = resolvePlaylist(ctx, "name");
         if (pl == null) return;
 
-        ctx.getEvent().reply(EmbedHelper.MSG_ERROR + " Delete **" + pl.getName() + "**? This cannot be undone.")
-                .addComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+        ctx.getEvent().replyComponents(
+                net.dv8tion.jda.api.components.container.Container.of(
+                        net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(EmbedHelper.MSG_ERROR + " Delete **" + pl.getName() + "**? This cannot be undone.")
+                ).withAccentColor(EmbedHelper.COLOR_MAIN)
+        ).useComponentsV2().addComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
                         net.dv8tion.jda.api.components.buttons.Button.danger("pl_delconfirm_" + pl.getId() + "_" + ctx.getUser().getId(), "Delete"),
                         net.dv8tion.jda.api.components.buttons.Button.secondary("pl_delcancel_" + ctx.getUser().getId(), "Cancel")
                 )).queue();
@@ -171,7 +174,6 @@ public class PlaylistCommand extends SlashCommand {
             // Resolve track from query
             ctx.deferReply();
             String query = queryOpt.getAsString();
-            if (!query.startsWith("http") && !query.contains(":")) query = "ytmsearch:" + query;
             resolveAndAddTrack(ctx, pl, query);
         }
     }
@@ -275,11 +277,14 @@ public class PlaylistCommand extends SlashCommand {
             }
             byte[] json = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(root);
             String filename = pl.getName().replaceAll("[^a-zA-Z0-9_-]", "_") + ".json";
-            ctx.getEvent().getHook().sendMessage("Exported **" + pl.getName() + "**")
-                    .addFiles(net.dv8tion.jda.api.utils.FileUpload.fromData(json, filename)).queue();
+            ctx.getEvent().getHook().sendMessageComponents(
+                    net.dv8tion.jda.api.components.container.Container.of(
+                            net.dv8tion.jda.api.components.textdisplay.TextDisplay.of("Exported **" + pl.getName() + "**")
+                    ).withAccentColor(EmbedHelper.COLOR_MAIN)
+            ).useComponentsV2().addFiles(net.dv8tion.jda.api.utils.FileUpload.fromData(json, filename)).queue();
         } catch (Exception e) {
             logger.error("Export failed", e);
-            ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Export failed.").queue();
+            ctx.replyError("Export failed.");
         }
     }
 
@@ -298,7 +303,7 @@ public class PlaylistCommand extends SlashCommand {
                 JsonNode root = mapper.readTree(data);
 
                 if (!root.has("version") || !root.has("name") || !root.has("tracks") || !root.get("tracks").isArray()) {
-                    ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Invalid playlist file format.").queue();
+                    ctx.replyError("Invalid playlist file format.");
                     return;
                 }
 
@@ -318,7 +323,7 @@ public class PlaylistCommand extends SlashCommand {
                 }
 
                 if (tracks.isEmpty()) {
-                    ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " No valid tracks found.").queue();
+                    ctx.replyError("No valid tracks found.");
                     return;
                 }
 
@@ -329,8 +334,11 @@ public class PlaylistCommand extends SlashCommand {
                     final List<PlaylistTrack> finalTracks = tracks;
                     // Store import data temporarily using button IDs
                     ImportCache.store(userId, name, finalTracks);
-                    ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Playlist **" + name + "** already exists.")
-                            .addComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                    ctx.getEvent().getHook().sendMessageComponents(
+                            net.dv8tion.jda.api.components.container.Container.of(
+                                    net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(EmbedHelper.MSG_ERROR + " Playlist **" + name + "** already exists.")
+                            ).withAccentColor(EmbedHelper.COLOR_MAIN)
+                    ).useComponentsV2().addComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
                                     net.dv8tion.jda.api.components.buttons.Button.danger("import_replace_" + userId, "Replace"),
                                     net.dv8tion.jda.api.components.buttons.Button.primary("import_rename_" + userId, "Rename"),
                                     net.dv8tion.jda.api.components.buttons.Button.secondary("import_cancel_" + userId, "Cancel")
@@ -338,14 +346,14 @@ public class PlaylistCommand extends SlashCommand {
                 } else {
                     PlaylistData imported = PlaylistManager.getInstance().importPlaylist(userId, name, tracks);
                     if (imported != null) {
-                        ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Imported **" + imported.getName() + "** with " + imported.getTracks().size() + " tracks").queue();
+                        ctx.replySuccess("Imported **" + imported.getName() + "** with " + imported.getTracks().size() + " tracks");
                     } else {
-                        ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Import failed. Playlist limit may be reached.").queue();
+                        ctx.replyError("Import failed. Playlist limit may be reached.");
                     }
                 }
             } catch (Exception e) {
                 logger.error("Import failed", e);
-                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Failed to parse import file.").queue();
+                ctx.replyError("Failed to parse import file.");
             }
         });
     }
@@ -387,10 +395,11 @@ public class PlaylistCommand extends SlashCommand {
             public void trackLoaded(AudioTrack track) {
                 PlaylistTrack pt = audioTrackToPlaylistTrack(track);
                 String result = PlaylistManager.getInstance().addTrack(ctx.getUser().getId(), pl.getId(), pt);
-                String msg = result.equals("ok")
-                        ? EmbedHelper.MSG_SUCCESS + " Added **" + track.getInfo().title + "** to **" + pl.getName() + "**"
-                        : EmbedHelper.MSG_ERROR + " " + (result.equals("duplicate") ? "Already in playlist." : "Failed.");
-                ctx.getEvent().getHook().sendMessage(msg).queue();
+                if (result.equals("ok")) {
+                    ctx.replySuccess("Added **" + track.getInfo().title + "** to **" + pl.getName() + "**");
+                } else {
+                    ctx.replyError(result.equals("duplicate") ? "Already in playlist." : "Failed.");
+                }
             }
             @Override
             public void playlistLoaded(AudioPlaylist playlist) {
@@ -405,16 +414,16 @@ public class PlaylistCommand extends SlashCommand {
                             added++;
                         }
                     }
-                    ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Added **" + added + "** tracks from **" + playlist.getName() + "** to **" + pl.getName() + "**").queue();
+                    ctx.replySuccess("Added **" + added + "** tracks from **" + playlist.getName() + "** to **" + pl.getName() + "**");
                 }
             }
             @Override
             public void noMatches() {
-                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " No matches found.").queue();
+                ctx.replyError("No matches found.");
             }
             @Override
             public void loadFailed(FriendlyException e) {
-                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Load failed: " + e.getMessage()).queue();
+                ctx.replyError("Load failed: " + e.getMessage());
             }
         });
     }
@@ -481,13 +490,11 @@ public class PlaylistCommand extends SlashCommand {
         }
 
         mm.updateNowPlayingMessage();
-        String msg;
         if (isInstant || !wasPlaying) {
-            msg = EmbedHelper.MSG_SUCCESS + " Playing **" + pl.getName() + "** • `" + loaded + " tracks`";
+            ctx.replySuccess("Playing **" + pl.getName() + "** • `" + loaded + " tracks`");
         } else {
-            msg = EmbedHelper.MSG_SUCCESS + " Queued **" + pl.getName() + "** after " + existingQueue + " tracks • `" + loaded + " tracks`";
+            ctx.replySuccess("Queued **" + pl.getName() + "** after " + existingQueue + " tracks • `" + loaded + " tracks`");
         }
-        ctx.getEvent().getHook().sendMessage(msg).queue();
     }
 
     public static AudioTrack resolvePlaylistTrack(PlaylistTrack pt, net.dv8tion.jda.api.entities.Guild guild) {

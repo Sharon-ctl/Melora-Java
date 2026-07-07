@@ -32,15 +32,12 @@ public class SearchCommand extends SlashCommand {
         
         ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
 
-        com.discord.musicbot.audio.PlayerManager.getInstance().loadItemWithFallback(ctx.getMusicManager(), "ytmsearch:" + query, new AudioLoadResultHandler() {
+        com.discord.musicbot.audio.PlayerManager.getInstance().loadItemOrdered(ctx.getGuild(), query, new AudioLoadResultHandler() {
             @Override
             public void trackLoaded(AudioTrack track) {
                 track.setUserData("{\"requester\":\"" + ctx.getMember().getId() + "\"}");
                 ctx.getMusicManager().getScheduler().queue(track);
-                var container = Container.of(
-                    TextDisplay.of(EmbedHelper.MSG_SUCCESS + " Added **" + EmbedHelper.escapeMarkdown(track.getInfo().title) + "** to the queue.")
-                ).withAccentColor(EmbedHelper.COLOR_MAIN);
-                ctx.getEvent().getHook().sendMessageComponents(container).useComponentsV2().queue();
+                ctx.replySuccess("Added **" + EmbedHelper.escapeMarkdown(track.getInfo().title) + "** to the queue.");
             }
 
             @Override
@@ -79,25 +76,17 @@ public class SearchCommand extends SlashCommand {
                     ActionRow.of(menuBuilder.build())
                 ).withAccentColor(EmbedHelper.COLOR_MAIN);
                 
-                ctx.getEvent().getHook().sendMessageComponents(container)
-                    .useComponentsV2()
-                    .queue();
+                ctx.replyContainer(container);
             }
 
             @Override
             public void noMatches() {
-                var container = Container.of(
-                    TextDisplay.of(EmbedHelper.MSG_ERROR + " No results found for `" + query + "`.")
-                ).withAccentColor(EmbedHelper.COLOR_MAIN);
-                ctx.getEvent().getHook().sendMessageComponents(container).useComponentsV2().queue();
+                ctx.replyError("No results found for `" + query + "`.");
             }
 
             @Override
             public void loadFailed(FriendlyException exception) {
-                var container = Container.of(
-                    TextDisplay.of(EmbedHelper.MSG_ERROR + " Could not search: " + exception.getMessage())
-                ).withAccentColor(EmbedHelper.COLOR_MAIN);
-                ctx.getEvent().getHook().sendMessageComponents(container).useComponentsV2().queue();
+                ctx.replyError("Could not search: " + exception.getMessage());
             }
         });
     }

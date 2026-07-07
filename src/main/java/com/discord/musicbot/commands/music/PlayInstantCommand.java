@@ -18,9 +18,6 @@ public class PlayInstantCommand extends SlashCommand {
         String query = ctx.getOption("query").getAsString();
         ctx.deferReply();
         ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
-        if (!query.startsWith("http") && !query.contains(":")) {
-            query = "ytmsearch:" + query;
-        }
         PlayerManager.getInstance().loadAndPlayInstant(ctx.getEvent(), query);
     }
 

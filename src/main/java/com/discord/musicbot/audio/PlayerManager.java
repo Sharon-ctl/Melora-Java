@@ -11,6 +11,8 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.discord.musicbot.commands.framework.EmbedHelper;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -230,37 +232,101 @@ public class PlayerManager {
     public record SpotifyMetadata(String query, String title, String artist, String artworkUrl, long duration, String spotifyUrl) {}
     private record SpotifyPlaylistResult(String name, List<SpotifyMetadata> tracks) {}
 
+    private volatile String cachedSpotifyToken = null;
+    private volatile long spotifyTokenExpiry = 0;
+
+    private synchronized String getCachedSpotifyToken() {
+        if (cachedSpotifyToken == null || System.currentTimeMillis() > spotifyTokenExpiry) {
+            String token = getAnonymousSpotifyToken("4cOdK2wGLETKBW3PvgPWqT", "track");
+            if (token != null) {
+                cachedSpotifyToken = token;
+                spotifyTokenExpiry = System.currentTimeMillis() + (25 * 60 * 1000L); // 25 minutes
+            }
+        }
+        return cachedSpotifyToken;
+    }
+
     public CompletableFuture<List<SpotifyMetadata>> searchSpotify(String query) {
         return CompletableFuture.supplyAsync(() -> {
             List<SpotifyMetadata> results = new ArrayList<>();
             try {
                 java.net.http.HttpClient client = httpClient;
-                String url = "https://itunes.apple.com/search?term="
-                        + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8)
-                        + "&entity=song&limit=10";
-                java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                        .uri(java.net.URI.create(url))
-                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                        .GET()
-                        .build();
-                java.net.http.HttpResponse<String> response = client.send(request,
-                        java.net.http.HttpResponse.BodyHandlers.ofString());
-                String body = response.body();
-
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(body);
-                com.fasterxml.jackson.databind.JsonNode items = root.path("results");
-                if (items.isArray()) {
-                    for (com.fasterxml.jackson.databind.JsonNode item : items) {
-                        String title = item.path("trackName").asText("");
-                        String artist = item.path("artistName").asText("");
-                        long duration = item.path("trackTimeMillis").asLong(0);
-                        String artwork = item.path("artworkUrl100").asText(null);
-                        if (artwork != null) {
-                            artwork = artwork.replace("100x100bb.jpg", "600x600bb.jpg");
+                String token = getCachedSpotifyToken();
+                if (token != null) {
+                    try {
+                        String apiUrl = "https://api.spotify.com/v1/search?q="
+                                + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8)
+                                + "&type=track&limit=10";
+                        java.net.http.HttpRequest apiReq = java.net.http.HttpRequest.newBuilder()
+                                .uri(java.net.URI.create(apiUrl))
+                                .header("Authorization", "Bearer " + token)
+                                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                                .GET()
+                                .build();
+                        java.net.http.HttpResponse<String> apiResp = client.send(apiReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+                        if (apiResp.statusCode() == 200) {
+                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(apiResp.body());
+                            com.fasterxml.jackson.databind.JsonNode items = root.path("tracks").path("items");
+                            if (items.isArray()) {
+                                for (com.fasterxml.jackson.databind.JsonNode item : items) {
+                                    String id = item.path("id").asText("");
+                                    String title = item.path("name").asText("");
+                                    StringBuilder artists = new StringBuilder();
+                                    com.fasterxml.jackson.databind.JsonNode arr = item.path("artists");
+                                    if (arr.isArray()) {
+                                        for (int i = 0; i < arr.size(); i++) {
+                                            if (i > 0) artists.append(", ");
+                                            artists.append(arr.get(i).path("name").asText(""));
+                                        }
+                                    }
+                                    long duration = item.path("duration_ms").asLong(0);
+                                    String artwork = null;
+                                    com.fasterxml.jackson.databind.JsonNode imgs = item.path("album").path("images");
+                                    if (imgs.isArray() && imgs.size() > 0) {
+                                        artwork = imgs.get(0).path("url").asText(null);
+                                    }
+                                    String spotifyUrl = !id.isEmpty() ? "https://open.spotify.com/track/" + id : null;
+                                    if (!title.isEmpty() && duration > 0) {
+                                        results.add(new SpotifyMetadata("ytmsearch:" + title + " " + artists, title, artists.toString(), artwork, duration, spotifyUrl));
+                                    }
+                                }
+                            }
+                        } else if (apiResp.statusCode() == 401) {
+                            cachedSpotifyToken = null;
                         }
-                        if (!title.isEmpty() && duration > 0) {
-                            results.add(new SpotifyMetadata("ytmsearch:" + title + " " + artist, title, artist, artwork, duration, null));
+                    } catch (Exception ignored) {}
+                }
+
+                if (results.isEmpty()) {
+                    String url = "https://itunes.apple.com/search?term="
+                            + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8)
+                            + "&entity=song&limit=10";
+                    java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                            .uri(java.net.URI.create(url))
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                            .GET()
+                            .build();
+                    java.net.http.HttpResponse<String> response = client.send(request,
+                            java.net.http.HttpResponse.BodyHandlers.ofString());
+                    String body = response.body();
+
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(body);
+                    com.fasterxml.jackson.databind.JsonNode items = root.path("results");
+                    if (items.isArray()) {
+                        for (com.fasterxml.jackson.databind.JsonNode item : items) {
+                            String title = item.path("trackName").asText("");
+                            String artist = item.path("artistName").asText("");
+                            long duration = item.path("trackTimeMillis").asLong(0);
+                            String artwork = item.path("artworkUrl100").asText(null);
+                            if (artwork != null) {
+                                artwork = artwork.replace("100x100bb.jpg", "600x600bb.jpg");
+                            }
+                            if (!title.isEmpty() && duration > 0) {
+                                String searchUrl = "https://open.spotify.com/search/" + java.net.URLEncoder.encode(title + " " + artist, java.nio.charset.StandardCharsets.UTF_8);
+                                results.add(new SpotifyMetadata("ytmsearch:" + title + " " + artist, title, artist, artwork, duration, searchUrl));
+                            }
                         }
                     }
                 }
@@ -327,8 +393,9 @@ public class PlayerManager {
 
     public void loadSpotifyTrackWithFallback(MusicManager musicManager, SpotifyMetadata meta, com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler handler) {
         String query = meta.query() != null ? meta.query() : "ytmsearch:" + meta.title() + " " + meta.artist();
+        String uri = meta.spotifyUrl() != null ? meta.spotifyUrl() : "https://open.spotify.com/search/" + java.net.URLEncoder.encode(meta.title() + " " + (meta.artist() != null ? meta.artist() : ""), java.nio.charset.StandardCharsets.UTF_8);
         com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo spotifyInfo = new com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo(
-                meta.title(), meta.artist() != null ? meta.artist() : "Spotify", meta.duration(), "spotify", false, meta.spotifyUrl() != null ? meta.spotifyUrl() : query);
+                meta.title(), meta.artist() != null ? meta.artist() : "Spotify", meta.duration(), "spotify", false, uri);
 
         loadItemWithFallback(musicManager, query, new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
             @Override
@@ -373,7 +440,7 @@ public class PlayerManager {
             try {
                 java.net.http.HttpClient client = httpClient;
                 String trackId = url.split("\\?")[0].replaceAll(".*/track/", "");
-                String token = getAnonymousSpotifyToken(trackId, "track");
+                String token = getCachedSpotifyToken();
                 if (token != null) {
                     try {
                         java.net.http.HttpRequest apiReq = java.net.http.HttpRequest.newBuilder()
@@ -650,7 +717,7 @@ public class PlayerManager {
                 // If there are more tracks than what the scraper got, try anonymous Spotify token
                 if (totalCount > tracks.size()) {
                     String id = url.split("\\?")[0].replaceAll(".*/(playlist|album)/", "");
-                    String token = getAnonymousSpotifyToken(id, isAlbum ? "album" : "playlist");
+                    String token = getCachedSpotifyToken();
                     if (token != null) {
                         try {
                             int offset = tracks.size();
@@ -771,7 +838,9 @@ public class PlayerManager {
                 }
             });
         } else {
-            playerManager.loadItemOrdered(orderingKey, query, handler);
+            boolean isDirectUrl = query.startsWith("http://") || query.startsWith("https://") || query.contains("://") || query.startsWith("scsearch:") || query.startsWith("ytsearch:") || query.startsWith("ytmsearch:");
+            String targetQuery = isDirectUrl ? query : "ytmsearch:" + query;
+            playerManager.loadItemOrdered(orderingKey, targetQuery, handler);
         }
     }
 
@@ -805,8 +874,48 @@ public class PlayerManager {
                 });
             }
         } else {
-            loadItemWithFallback(musicManager, trackUrl, handler);
+            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:") || trackUrl.startsWith("ytsearch:") || trackUrl.startsWith("ytmsearch:");
+            if (!isDirectUrl) {
+                searchSpotify(trackUrl).thenAccept(results -> {
+                    if (results != null && !results.isEmpty()) {
+                        loadSpotifyTrackWithFallback(musicManager, results.get(0), new AudioLoadResultHandler() {
+                            @Override
+                            public void trackLoaded(AudioTrack track) {
+                                handler.trackLoaded(track);
+                            }
+                            @Override
+                            public void playlistLoaded(AudioPlaylist playlist) {
+                                handler.playlistLoaded(playlist);
+                            }
+                            @Override
+                            public void noMatches() {
+                                loadItemWithFallback(musicManager, "ytmsearch:" + trackUrl, handler);
+                            }
+                            @Override
+                            public void loadFailed(FriendlyException exception) {
+                                loadItemWithFallback(musicManager, "ytmsearch:" + trackUrl, handler);
+                            }
+                        });
+                    } else {
+                        loadItemWithFallback(musicManager, "ytmsearch:" + trackUrl, handler);
+                    }
+                }).exceptionally(ex -> {
+                    logger.warn("searchSpotify failed for url: {}, falling back to ytmsearch", trackUrl, ex);
+                    loadItemWithFallback(musicManager, "ytmsearch:" + trackUrl, handler);
+                    return null;
+                });
+            } else {
+                loadItemWithFallback(musicManager, trackUrl, handler);
+            }
         }
+    }
+
+    private net.dv8tion.jda.api.requests.restaction.WebhookMessageCreateAction<net.dv8tion.jda.api.entities.Message> sendHookMessage(net.dv8tion.jda.api.interactions.callbacks.IReplyCallback event, String message) {
+        return event.getHook().sendMessageComponents(
+                Container.of(
+                        TextDisplay.of(message)
+                ).withAccentColor(EmbedHelper.COLOR_MAIN)
+        ).useComponentsV2();
     }
 
     public void loadAndPlay(net.dv8tion.jda.api.interactions.callbacks.IReplyCallback event, String trackUrl) {
@@ -824,7 +933,7 @@ public class PlayerManager {
                 // Fetch + queue in background — tracks appear progressively in the queue
                 fetchSpotifyPlaylist(trackUrl).thenAccept(result -> {
                     if (result == null || result.tracks().isEmpty()) {
-                        event.getHook().sendMessage(EmbedHelper.MSG_ERROR + " Spotify " + type.toLowerCase()
+                        sendHookMessage(event, EmbedHelper.MSG_ERROR + " Spotify " + type.toLowerCase()
                                 + " is empty or could not be loaded.").queue();
                         return;
                     }
@@ -836,7 +945,7 @@ public class PlayerManager {
                         musicManager.getScheduler().queue(track);
                     }
                     musicManager.updateNowPlayingMessage();
-                    event.getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Queued **" + result.tracks().size()
+                    sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Queued **" + result.tracks().size()
                             + " tracks** from `" + escapeMarkdown(result.name()) + "`").queue();
                 });
             } else {
@@ -850,7 +959,7 @@ public class PlayerManager {
                                 musicManager.updateNowPlayingMessage();
                                 String displayTitle = escapeMarkdown(track.getInfo().title);
                                 String displayDuration = formatTime(track.getDuration());
-                                event.getHook().sendMessage(
+                                sendHookMessage(event,
                                         EmbedHelper.MSG_SUCCESS + " Queued **" + displayTitle + "** • `" + displayDuration + "`")
                                         .queue();
                             }
@@ -864,11 +973,11 @@ public class PlayerManager {
                             }
                             @Override
                             public void noMatches() {
-                                event.getHook().sendMessage("Nothing found for Spotify track.").queue();
+                                sendHookMessage(event, "Nothing found for Spotify track.").queue();
                             }
                             @Override
                             public void loadFailed(FriendlyException exception) {
-                                event.getHook().sendMessage("Error: " + exception.getMessage()).queue();
+                                sendHookMessage(event, "Error: " + exception.getMessage()).queue();
                             }
                         });
                     } else {
@@ -890,7 +999,7 @@ public class PlayerManager {
                                 musicManager.updateNowPlayingMessage();
                                 String displayTitle = escapeMarkdown(track.getInfo().title);
                                 String displayDuration = formatTime(track.getDuration());
-                                event.getHook().sendMessage(
+                                sendHookMessage(event,
                                         EmbedHelper.MSG_SUCCESS + " Queued **" + displayTitle + "** • `" + displayDuration + "`")
                                         .queue();
                             }
@@ -904,16 +1013,20 @@ public class PlayerManager {
                             }
                             @Override
                             public void noMatches() {
-                                executeLoadAndPlay(event, trackUrl, forcedArtworkUrl, musicManager);
+                                executeLoadAndPlay(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                             }
                             @Override
                             public void loadFailed(FriendlyException exception) {
-                                executeLoadAndPlay(event, trackUrl, forcedArtworkUrl, musicManager);
+                                executeLoadAndPlay(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                             }
                         });
                     } else {
-                        executeLoadAndPlay(event, trackUrl, forcedArtworkUrl, musicManager);
+                        executeLoadAndPlay(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                     }
+                }).exceptionally(ex -> {
+                    logger.warn("searchSpotify failed for play command: {}, falling back to ytmsearch", trackUrl, ex);
+                    executeLoadAndPlay(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                    return null;
                 });
             } else {
                 executeLoadAndPlay(event, trackUrl, forcedArtworkUrl, musicManager);
@@ -933,7 +1046,7 @@ public class PlayerManager {
                 musicManager.updateNowPlayingMessage();
                 String displayTitle = escapeMarkdown(track.getInfo().title);
                 String displayDuration = formatTime(track.getDuration());
-                event.getHook().sendMessage(
+                sendHookMessage(event,
                         EmbedHelper.MSG_SUCCESS + " Queued **" + displayTitle + "** • `" + displayDuration + "`")
                         .queue();
             }
@@ -947,7 +1060,7 @@ public class PlayerManager {
                     musicManager.updateNowPlayingMessage();
                     String displayTitle = escapeMarkdown(track.getInfo().title);
                     String displayDuration = formatTime(track.getDuration());
-                    event.getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Queued **" + displayTitle + "** • `"
+                    sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Queued **" + displayTitle + "** • `"
                             + displayDuration + "`").queue();
                 } else {
                     for (AudioTrack track : playlist.getTracks()) {
@@ -956,19 +1069,19 @@ public class PlayerManager {
                     }
                     musicManager.updateNowPlayingMessage();
                     String name = escapeMarkdown(playlist.getName());
-                    event.getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Queued **" + name + "** • `"
+                    sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Queued **" + name + "** • `"
                             + playlist.getTracks().size() + " tracks`").queue();
                 }
             }
 
             @Override
             public void noMatches() {
-                event.getHook().sendMessage("Nothing found for: " + trackUrl).queue();
+                sendHookMessage(event, "Nothing found for: " + trackUrl).queue();
             }
 
             @Override
             public void loadFailed(FriendlyException exception) {
-                event.getHook().sendMessage("Error: " + exception.getMessage()).queue();
+                sendHookMessage(event, "Error: " + exception.getMessage()).queue();
             }
         });
     }
@@ -992,7 +1105,7 @@ public class PlayerManager {
                         public void trackLoaded(AudioTrack track) {
                             track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
                             musicManager.getScheduler().playInstant(track);
-                            event.getHook().sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "**").queue();
+                            sendHookMessage(event, com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "**").queue();
                         }
                         @Override
                         public void playlistLoaded(AudioPlaylist playlist) {
@@ -1004,11 +1117,11 @@ public class PlayerManager {
                         }
                         @Override
                         public void noMatches() {
-                            event.getHook().sendMessage("No results found.").queue();
+                            sendHookMessage(event, "No results found.").queue();
                         }
                         @Override
                         public void loadFailed(FriendlyException exception) {
-                            event.getHook().sendMessage("Error: " + exception.getMessage()).queue();
+                            sendHookMessage(event, "Error: " + exception.getMessage()).queue();
                         }
                     });
                 } else {
@@ -1026,7 +1139,7 @@ public class PlayerManager {
                             public void trackLoaded(AudioTrack track) {
                                 track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
                                 musicManager.getScheduler().playInstant(track);
-                                event.getHook().sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "**").queue();
+                                sendHookMessage(event, com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "**").queue();
                             }
                             @Override
                             public void playlistLoaded(AudioPlaylist playlist) {
@@ -1038,16 +1151,20 @@ public class PlayerManager {
                             }
                             @Override
                             public void noMatches() {
-                                executeLoadAndPlayInstant(event, trackUrl, forcedArtworkUrl, musicManager);
+                                executeLoadAndPlayInstant(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                             }
                             @Override
                             public void loadFailed(FriendlyException exception) {
-                                executeLoadAndPlayInstant(event, trackUrl, forcedArtworkUrl, musicManager);
+                                executeLoadAndPlayInstant(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                             }
                         });
                     } else {
-                        executeLoadAndPlayInstant(event, trackUrl, forcedArtworkUrl, musicManager);
+                        executeLoadAndPlayInstant(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                     }
+                }).exceptionally(ex -> {
+                    logger.warn("searchSpotify failed for instant play: {}, falling back to ytmsearch", trackUrl, ex);
+                    executeLoadAndPlayInstant(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                    return null;
                 });
             } else {
                 executeLoadAndPlayInstant(event, trackUrl, forcedArtworkUrl, musicManager);
@@ -1062,13 +1179,13 @@ public class PlayerManager {
             public void trackLoaded(AudioTrack track) {
                 track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
                 musicManager.getScheduler().playInstant(track);
-                event.getHook().sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "**").queue();
+                sendHookMessage(event, com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "**").queue();
             }
 
             @Override
             public void playlistLoaded(AudioPlaylist playlist) {
                 if (playlist.getTracks().isEmpty()) {
-                    event.getHook().sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_ERROR + " No tracks found.").queue();
+                    sendHookMessage(event, com.discord.musicbot.commands.framework.EmbedHelper.MSG_ERROR + " No tracks found.").queue();
                     return;
                 }
                 AudioTrack track = playlist.getTracks().get(0);
@@ -1081,20 +1198,20 @@ public class PlayerManager {
                         t.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
                         musicManager.getScheduler().getQueueRaw().offer(t);
                     }
-                    event.getHook().sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "** • Queued `" + (playlist.getTracks().size() - 1) + "` tracks").queue();
+                    sendHookMessage(event, com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "** • Queued `" + (playlist.getTracks().size() - 1) + "` tracks").queue();
                 } else {
-                    event.getHook().sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "**").queue();
+                    sendHookMessage(event, com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "**").queue();
                 }
             }
 
             @Override
             public void noMatches() {
-                event.getHook().sendMessage("No results found.").queue();
+                sendHookMessage(event, "No results found.").queue();
             }
 
             @Override
             public void loadFailed(FriendlyException exception) {
-                event.getHook().sendMessage("Error: " + exception.getMessage()).queue();
+                sendHookMessage(event, "Error: " + exception.getMessage()).queue();
             }
         });
     }
@@ -1115,7 +1232,7 @@ public class PlayerManager {
                             track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
                             musicManager.getScheduler().insert(track, position);
                             String displayTitle = escapeMarkdown(track.getInfo().title);
-                            event.getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Inserted **" + displayTitle + "** • Position: `" + position + "`").queue();
+                            sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Inserted **" + displayTitle + "** • Position: `" + position + "`").queue();
                         }
                         @Override
                         public void playlistLoaded(AudioPlaylist playlist) {
@@ -1127,11 +1244,11 @@ public class PlayerManager {
                         }
                         @Override
                         public void noMatches() {
-                            event.getHook().sendMessage("No results found.").queue();
+                            sendHookMessage(event, "No results found.").queue();
                         }
                         @Override
                         public void loadFailed(FriendlyException exception) {
-                            event.getHook().sendMessage("Error: " + exception.getMessage()).queue();
+                            sendHookMessage(event, "Error: " + exception.getMessage()).queue();
                         }
                     });
                 } else {
@@ -1150,7 +1267,7 @@ public class PlayerManager {
                                 track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
                                 musicManager.getScheduler().insert(track, position);
                                 String displayTitle = escapeMarkdown(track.getInfo().title);
-                                event.getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Inserted **" + displayTitle + "** • Position: `" + position + "`").queue();
+                                sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Inserted **" + displayTitle + "** • Position: `" + position + "`").queue();
                             }
                             @Override
                             public void playlistLoaded(AudioPlaylist playlist) {
@@ -1162,16 +1279,20 @@ public class PlayerManager {
                             }
                             @Override
                             public void noMatches() {
-                                executeLoadAndInsert(event, trackUrl, position, musicManager);
+                                executeLoadAndInsert(event, "ytmsearch:" + trackUrl, position, musicManager);
                             }
                             @Override
                             public void loadFailed(FriendlyException exception) {
-                                executeLoadAndInsert(event, trackUrl, position, musicManager);
+                                executeLoadAndInsert(event, "ytmsearch:" + trackUrl, position, musicManager);
                             }
                         });
                     } else {
-                        executeLoadAndInsert(event, trackUrl, position, musicManager);
+                        executeLoadAndInsert(event, "ytmsearch:" + trackUrl, position, musicManager);
                     }
+                }).exceptionally(ex -> {
+                    logger.warn("searchSpotify failed for insert command: {}, falling back to ytmsearch", trackUrl, ex);
+                    executeLoadAndInsert(event, "ytmsearch:" + trackUrl, position, musicManager);
+                    return null;
                 });
             } else {
                 executeLoadAndInsert(event, trackUrl, position, musicManager);
@@ -1187,14 +1308,14 @@ public class PlayerManager {
                 track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
                 musicManager.getScheduler().insert(track, position);
                 String displayTitle = escapeMarkdown(track.getInfo().title);
-                event.getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Inserted **" + displayTitle
+                sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Inserted **" + displayTitle
                         + "** • Position: `" + position + "`").queue();
             }
 
             @Override
             public void playlistLoaded(AudioPlaylist playlist) {
                 if (playlist.getTracks().isEmpty()) {
-                    event.getHook().sendMessage("No tracks found.").queue();
+                    sendHookMessage(event, "No tracks found.").queue();
                     return;
                 }
                 
@@ -1202,25 +1323,25 @@ public class PlayerManager {
                     AudioTrack track = playlist.getTracks().get(0);
                     track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
                     musicManager.getScheduler().insert(track, position);
-                    event.getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Inserted **" + escapeMarkdown(track.getInfo().title) + "** • Position: `" + (position + 1) + "`").queue();
+                    sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Inserted **" + escapeMarkdown(track.getInfo().title) + "** • Position: `" + (position + 1) + "`").queue();
                 } else {
                     int currentPos = position;
                     for (AudioTrack track : playlist.getTracks()) {
                         track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
                         musicManager.getScheduler().insert(track, currentPos++);
                     }
-                    event.getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Inserted `" + playlist.getTracks().size() + "` tracks • Starting at Position: `" + (position + 1) + "`").queue();
+                    sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Inserted `" + playlist.getTracks().size() + "` tracks • Starting at Position: `" + (position + 1) + "`").queue();
                 }
             }
 
             @Override
             public void noMatches() {
-                event.getHook().sendMessage("No results found.").queue();
+                sendHookMessage(event, "No results found.").queue();
             }
 
             @Override
             public void loadFailed(FriendlyException exception) {
-                event.getHook().sendMessage("Error: " + exception.getMessage()).queue();
+                sendHookMessage(event, "Error: " + exception.getMessage()).queue();
             }
         });
     }

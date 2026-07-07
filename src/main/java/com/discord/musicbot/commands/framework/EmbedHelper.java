@@ -159,10 +159,10 @@ public class EmbedHelper {
             
             String url = track.getInfo().uri;
             if (url == null) {
-                url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(trackTitle, java.nio.charset.StandardCharsets.UTF_8);
+                url = "https://open.spotify.com/search/" + java.net.URLEncoder.encode(trackTitle, java.nio.charset.StandardCharsets.UTF_8);
             } else if (url.startsWith("ytsearch:") || url.startsWith("ytmsearch:")) {
                 String raw = url.startsWith("ytmsearch:") ? url.substring("ytmsearch:".length()) : url.substring("ytsearch:".length());
-                url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(raw, java.nio.charset.StandardCharsets.UTF_8);
+                url = "https://open.spotify.com/search/" + java.net.URLEncoder.encode(raw, java.nio.charset.StandardCharsets.UTF_8);
             }
             trackTitle = escapeMarkdown(trackTitle);
             
@@ -502,9 +502,9 @@ public class EmbedHelper {
                 if (title.length() > 50) title = title.substring(0, 47) + "...";
                 
                 String url = t.uri;
-                if (url != null && (url.startsWith("ytsearch:") || url.startsWith("ytmsearch:"))) {
-                    String raw = url.startsWith("ytmsearch:") ? url.substring("ytmsearch:".length()) : url.substring("ytsearch:".length());
-                    url = "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(raw, java.nio.charset.StandardCharsets.UTF_8);
+                if (url == null || url.startsWith("ytsearch:") || url.startsWith("ytmsearch:")) {
+                    String raw = url != null && url.startsWith("ytmsearch:") ? url.substring("ytmsearch:".length()) : (url != null && url.startsWith("ytsearch:") ? url.substring("ytsearch:".length()) : title);
+                    url = "https://open.spotify.com/search/" + java.net.URLEncoder.encode(raw, java.nio.charset.StandardCharsets.UTF_8);
                 }
                 
                 content.append(String.format("`%d.` [**%s**](%s)\n", i + 1, escapeMarkdown(title), url));

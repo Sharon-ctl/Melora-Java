@@ -60,8 +60,7 @@ public class CommandRegistry {
             long last = cooldowns.get(userId);
             if (now - last < 3000) {
                 double timeLeft = (3000 - (now - last)) / 1000.0;
-                event.reply(String.format("Please wait %.1f more seconds before using another command.", timeLeft))
-                        .setEphemeral(true).queue();
+                replyError(event, String.format("Please wait %.1f more seconds before using another command.", timeLeft));
                 return;
             }
         }
@@ -69,7 +68,7 @@ public class CommandRegistry {
 
         SlashCommand cmd = commands.get(event.getName());
         if (cmd == null) {
-            event.reply("Unknown command.").setEphemeral(true).queue();
+            replyError(event, "Unknown command.");
             return;
         }
 
@@ -80,8 +79,7 @@ public class CommandRegistry {
         if (reqChannel != null && !reqChannel.isEmpty() && !event.getChannel().getId().equals(reqChannel)) {
             // Only allow settings/help commands to bypass channel restrictions so admins don't get locked out
             if (!cmd.getName().equals("settings") && !cmd.getName().equals("help")) {
-                event.reply("Commands are restricted to <#" + reqChannel + "> in this server.")
-                        .setEphemeral(true).queue();
+                replyError(event, "Commands are restricted to <#" + reqChannel + "> in this server.");
                 return;
             }
         }
@@ -96,11 +94,7 @@ public class CommandRegistry {
                 } catch (Exception e) {
                     logger.error("Error executing command: {}", cmd.getName(), e);
                     try {
-                        if (event.isAcknowledged()) {
-                            event.getHook().sendMessage("An error occurred while executing the command.").setEphemeral(true).queue();
-                        } else {
-                            event.reply("An error occurred while executing the command.").setEphemeral(true).queue();
-                        }
+                        replyError(event, "An error occurred while executing the command.");
                     } catch (Exception ignored) {}
                 }
             });
@@ -131,10 +125,20 @@ public class CommandRegistry {
 
         if (replyCallback != null) {
             org.slf4j.LoggerFactory.getLogger(CommandRegistry.class).warn("SECURITY: User {} attempted unauthorized DJ action in Guild {}", member.getUser().getName(), guild.getName());
-            replyCallback.reply("DJ mode is enabled. You need the DJ role, `Manage Server` permission, or be the requester of the current track to do this.")
-                    .setEphemeral(true).queue();
+            replyError(replyCallback, "DJ mode is enabled. You need the DJ role, `Manage Server` permission, or be the requester of the current track to do this.");
         }
         return false;
+    }
+
+    private static void replyError(net.dv8tion.jda.api.interactions.callbacks.IReplyCallback callback, String msg) {
+        var container = net.dv8tion.jda.api.components.container.Container.of(
+            net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(EmbedHelper.MSG_ERROR + " " + msg)
+        ).withAccentColor(EmbedHelper.COLOR_MAIN);
+        if (callback.isAcknowledged()) {
+            callback.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue();
+        } else {
+            callback.replyComponents(container).useComponentsV2().setEphemeral(true).queue();
+        }
     }
 
     public static boolean isAuthorizedForLock(CommandContext ctx) {
@@ -227,10 +231,8 @@ public class CommandRegistry {
                 if (sb.length() > 0) sb.append(", ");
                 sb.append("**").append(p.getName()).append("**");
             }
-            if (!ctx.getEvent().isAcknowledged()) {
-                ctx.replyError("I cannot join `" + targetChannel.getName() + "`. Missing permissions: "
-                        + sb.toString() + ". Please grant them and try again.");
-            }
+            ctx.replyError("I cannot join `" + targetChannel.getName() + "`. Missing permissions: "
+                    + sb.toString() + ". Please grant them and try again.");
             return false;
         }
         return true;

@@ -434,7 +434,11 @@ public class TrackScheduler extends AudioEventAdapter {
                         .getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class,
                                 musicManager.getNowPlayingChannelId());
                                         if (tc != null) {
-                                            tc.sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_ERROR + " " + (useRandom ? "Random continuous play" : "Autoplay") + " ran out of recommendations.").queue();
+                                            tc.sendMessageComponents(
+                                                net.dv8tion.jda.api.components.container.Container.of(
+                                                    net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(com.discord.musicbot.commands.framework.EmbedHelper.MSG_ERROR + " " + (useRandom ? "Random continuous play" : "Autoplay") + " ran out of recommendations.")
+                                                ).withAccentColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN)
+                                            ).useComponentsV2().queue();
                                         }
                                     } catch (Exception ignored) {}
                                 }

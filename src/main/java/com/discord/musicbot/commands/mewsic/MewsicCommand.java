@@ -168,11 +168,14 @@ public class MewsicCommand extends SlashCommand {
 
             byte[] json = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(root);
             String filename = exportName.replaceAll("[^a-zA-Z0-9_-]", "_") + ".mewsic.json";
-            ctx.getEvent().getHook().sendMessage("Exported **" + exportName + "** to Mewsic format.")
-                    .addFiles(net.dv8tion.jda.api.utils.FileUpload.fromData(json, filename)).queue();
+            ctx.getEvent().getHook().sendMessageComponents(
+                    net.dv8tion.jda.api.components.container.Container.of(
+                            net.dv8tion.jda.api.components.textdisplay.TextDisplay.of("Exported **" + exportName + "** to Mewsic format.")
+                    ).withAccentColor(EmbedHelper.COLOR_MAIN)
+            ).useComponentsV2().addFiles(net.dv8tion.jda.api.utils.FileUpload.fromData(json, filename)).queue();
         } catch (Exception e) {
             logger.error("Mewsic Export failed", e);
-            ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Export failed.").queue();
+            ctx.replyError("Export failed.");
         }
     }
 
@@ -190,7 +193,7 @@ public class MewsicCommand extends SlashCommand {
                 JsonNode root = mapper.readTree(data);
 
                 if (!root.has("name") || !root.has("tracks") || !root.get("tracks").isArray()) {
-                    ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Invalid Mewsic playlist file format.").queue();
+                    ctx.replyError("Invalid Mewsic playlist file format.");
                     return;
                 }
 
@@ -223,7 +226,7 @@ public class MewsicCommand extends SlashCommand {
                 }
 
                 if (tracks.isEmpty()) {
-                    ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " No valid tracks found.").queue();
+                    ctx.replyError("No valid tracks found.");
                     return;
                 }
 
@@ -232,8 +235,11 @@ public class MewsicCommand extends SlashCommand {
                 
                 if (existing != null) {
                     com.discord.musicbot.commands.playlist.PlaylistCommand.ImportCache.store(userId, name, tracks);
-                    ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Playlist **" + name + "** already exists.")
-                            .addComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
+                    ctx.getEvent().getHook().sendMessageComponents(
+                            net.dv8tion.jda.api.components.container.Container.of(
+                                    net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(EmbedHelper.MSG_ERROR + " Playlist **" + name + "** already exists.")
+                            ).withAccentColor(EmbedHelper.COLOR_MAIN)
+                    ).useComponentsV2().addComponents(net.dv8tion.jda.api.components.actionrow.ActionRow.of(
                                     net.dv8tion.jda.api.components.buttons.Button.danger("import_replace_mewsic_" + userId, "Replace"),
                                     net.dv8tion.jda.api.components.buttons.Button.primary("import_rename_" + userId, "Rename"),
                                     net.dv8tion.jda.api.components.buttons.Button.secondary("import_cancel_" + userId, "Cancel")
@@ -242,14 +248,14 @@ public class MewsicCommand extends SlashCommand {
                     PlaylistData imported = PlaylistManager.getInstance().importPlaylist(userId, name, tracks);
                     if (imported != null) {
                         PlaylistManager.getInstance().markAsMewsic(userId, imported.getId());
-                        ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Imported Mewsic playlist **" + imported.getName() + "** with " + imported.getTracks().size() + " tracks").queue();
+                        ctx.replySuccess("Imported Mewsic playlist **" + imported.getName() + "** with " + imported.getTracks().size() + " tracks");
                     } else {
-                        ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Import failed. Playlist limit may be reached.").queue();
+                        ctx.replyError("Import failed. Playlist limit may be reached.");
                     }
                 }
             } catch (Exception e) {
                 logger.error("Mewsic Import failed", e);
-                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Failed to parse Mewsic import file.").queue();
+                ctx.replyError("Failed to parse Mewsic import file.");
             }
         });
     }
@@ -288,7 +294,7 @@ public class MewsicCommand extends SlashCommand {
                 JsonNode root = mapper.readTree(data);
 
                 if (!root.has("tracks") || !root.get("tracks").isArray()) {
-                    ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Invalid Mewsic file format.").queue();
+                    ctx.replyError("Invalid Mewsic file format.");
                     return;
                 }
 
@@ -332,23 +338,21 @@ public class MewsicCommand extends SlashCommand {
                 }
 
                 if (loaded == 0) {
-                    ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " No valid tracks found.").queue();
+                    ctx.replyError("No valid tracks found.");
                     return;
                 }
 
                 mm.updateNowPlayingMessage();
                 String name = root.has("name") ? root.get("name").asText() : "Mewsic Playlist";
-                String msg;
                 if (!wasPlaying) {
-                    msg = EmbedHelper.MSG_SUCCESS + " Playing **" + name + "** • `" + loaded + " tracks`";
+                    ctx.replySuccess("Playing **" + name + "** • `" + loaded + " tracks`");
                 } else {
-                    msg = EmbedHelper.MSG_SUCCESS + " Queued **" + name + "** after " + existingQueue + " tracks • `" + loaded + " tracks`";
+                    ctx.replySuccess("Queued **" + name + "** after " + existingQueue + " tracks • `" + loaded + " tracks`");
                 }
-                ctx.getEvent().getHook().sendMessage(msg).queue();
 
             } catch (Exception e) {
                 logger.error("Mewsic Play failed", e);
-                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Failed to parse Mewsic file.").queue();
+                ctx.replyError("Failed to parse Mewsic file.");
             }
         });
     }

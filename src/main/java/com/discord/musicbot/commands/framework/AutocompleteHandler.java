@@ -178,6 +178,9 @@ public class AutocompleteHandler {
                     finalChoices.add(new Command.Choice(label, val));
                 }
                 event.replyChoices(finalChoices).queue();
+            }).exceptionally(ex -> {
+                event.replyChoices(finalChoices).queue();
+                return null;
             });
             return; // Return early because reply is handled asynchronously
         }

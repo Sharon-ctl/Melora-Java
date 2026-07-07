@@ -177,9 +177,9 @@ public class QueueCommand extends SlashCommand {
         try {
             ObjectMapper mapper = new ObjectMapper();
             byte[] json = mapper.writeValueAsBytes(exportData);
-            ctx.getEvent().reply("Here is your queue export:")
-                .addFiles(FileUpload.fromData(json, "queue_export.json"))
-                .queue();
+            ctx.getEvent().replyComponents(
+                Container.of(TextDisplay.of("Here is your queue export:")).withAccentColor(EmbedHelper.COLOR_MAIN)
+            ).useComponentsV2().addFiles(FileUpload.fromData(json, "queue_export.json")).queue();
         } catch (Exception e) {
             ctx.replyError("Failed to export queue.");
         }
@@ -218,9 +218,9 @@ public class QueueCommand extends SlashCommand {
                     queued++;
                     if (queued >= 500) break;
                 }
-                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_SUCCESS + " Started importing " + tracks.size() + " tracks from the JSON file.").queue();
+                ctx.replySuccess("Started importing " + tracks.size() + " tracks from the JSON file.");
             } catch (Exception e) {
-                ctx.getEvent().getHook().sendMessage(EmbedHelper.MSG_ERROR + " Failed to parse JSON file.").queue();
+                ctx.replyError("Failed to parse JSON file.");
             }
         });
     }

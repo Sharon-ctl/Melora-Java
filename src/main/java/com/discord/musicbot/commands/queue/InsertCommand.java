@@ -19,9 +19,6 @@ public class InsertCommand extends SlashCommand {
         String query = ctx.getOption("query").getAsString();
         int pos = ctx.getOption("position").getAsInt() - 1;
         ctx.deferReply();
-        if (!query.startsWith("http") && !query.contains(":")) {
-            query = "ytmsearch:" + query;
-        }
         PlayerManager.getInstance().loadAndInsert(ctx.getEvent(), query, pos);
     }
 

@@ -104,7 +104,9 @@ public class VoteManager {
         ActiveVote vote = activeVotes.get(guildId);
         
         if (vote == null) {
-            event.reply("This vote has expired or is invalid.").setEphemeral(true).queue();
+            event.replyComponents(net.dv8tion.jda.api.components.container.Container.of(
+                    net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(EmbedHelper.MSG_ERROR + " This vote has expired or is invalid.")
+            ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().setEphemeral(true).queue();
             return;
         }
 
@@ -114,7 +116,9 @@ public class VoteManager {
                 ? event.getMember().getVoiceState().getChannel() : null;
 
         if (botChannel == null || userChannel == null || !botChannel.equals(userChannel)) {
-            event.reply("You must be in the same voice channel to vote.").setEphemeral(true).queue();
+            event.replyComponents(net.dv8tion.jda.api.components.container.Container.of(
+                    net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(EmbedHelper.MSG_ERROR + " You must be in the same voice channel to vote.")
+            ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().setEphemeral(true).queue();
             return;
         }
 
@@ -175,8 +179,9 @@ public class VoteManager {
             net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel channel = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, vote.channelId);
             if (channel != null) {
                 channel.retrieveMessageById(vote.messageId).queue(msg -> {
-                    msg.editMessage(passed ? EmbedHelper.MSG_SUCCESS + " Vote passed!" : EmbedHelper.MSG_ERROR + " Vote failed/timed out.")
-                       .setComponents().queue();
+                    msg.editMessageComponents(net.dv8tion.jda.api.components.container.Container.of(
+                            net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(passed ? EmbedHelper.MSG_SUCCESS + " Vote passed!" : EmbedHelper.MSG_ERROR + " Vote failed/timed out.")
+                    ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
                 }, err -> {});
             }
         }

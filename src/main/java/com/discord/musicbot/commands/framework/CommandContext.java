@@ -8,6 +8,8 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 
 public class CommandContext {
@@ -55,19 +57,37 @@ public class CommandContext {
     }
 
     public void reply(String message) {
-        event.reply(message).queue();
+        Container container = Container.of(TextDisplay.of(message)).withAccentColor(EmbedHelper.COLOR_MAIN);
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().queue();
+        else event.replyComponents(container).useComponentsV2().queue();
     }
 
     public void replyEphemeral(String message) {
-        event.reply(message).setEphemeral(true).queue();
+        Container container = Container.of(TextDisplay.of(message)).withAccentColor(EmbedHelper.COLOR_MAIN);
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue();
+        else event.replyComponents(container).useComponentsV2().setEphemeral(true).queue();
     }
 
     public void replySuccess(String message) {
-        event.reply(EmbedHelper.MSG_SUCCESS + " " + message).queue();
+        Container container = Container.of(TextDisplay.of(EmbedHelper.MSG_SUCCESS + " " + message)).withAccentColor(EmbedHelper.COLOR_MAIN);
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().queue();
+        else event.replyComponents(container).useComponentsV2().queue();
     }
 
     public void replyError(String message) {
-        event.reply(EmbedHelper.MSG_ERROR + " " + message).setEphemeral(true).queue();
+        Container container = Container.of(TextDisplay.of(EmbedHelper.MSG_ERROR + " " + message)).withAccentColor(EmbedHelper.COLOR_MAIN);
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue();
+        else event.replyComponents(container).useComponentsV2().setEphemeral(true).queue();
+    }
+
+    public void replyContainer(Container container) {
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().queue();
+        else event.replyComponents(container).useComponentsV2().queue();
+    }
+
+    public void replyContainerEphemeral(Container container) {
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue();
+        else event.replyComponents(container).useComponentsV2().setEphemeral(true).queue();
     }
 
     public void deferReply() {

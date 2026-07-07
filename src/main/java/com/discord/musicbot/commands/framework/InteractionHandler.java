@@ -34,7 +34,7 @@ public class InteractionHandler {
 
             MusicManager manager = PlayerManager.getInstance().getMusicManager(event.getGuild().getIdLong());
             if (manager == null) {
-                event.reply("No active music session.").setEphemeral(true).queue();
+                replyError(event, "No active music session.");
                 return;
             }
 
@@ -47,15 +47,13 @@ public class InteractionHandler {
             }
         } catch (Exception e) {
             org.slf4j.LoggerFactory.getLogger(InteractionHandler.class).error("Error in handleButton", e);
-            if (!event.isAcknowledged()) {
-                event.reply("An error occurred processing that button.").setEphemeral(true).queue();
-            }
+            replyError(event, "An error occurred processing that button.");
         }
     }
 
     private static void handleSettingsButtons(ButtonInteractionEvent event, String id) {
         if (!event.getMember().hasPermission(net.dv8tion.jda.api.Permission.ADMINISTRATOR)) {
-            event.reply("You must be an Administrator to change these settings.").setEphemeral(true).queue();
+            replyError(event, "You must be an Administrator to change these settings.");
             return;
         }
 
@@ -123,52 +121,63 @@ public class InteractionHandler {
         if (id.startsWith("pl_delconfirm_")) {
             String[] parts = id.split("_", 4);
             if (parts.length < 4 || !parts[3].equals(userId)) {
-                event.reply("This isn't your confirmation.").setEphemeral(true).queue();
+                replyError(event, "This isn't your confirmation.");
                 return;
             }
             String playlistId = parts[2];
             boolean deleted = PlaylistManager.getInstance().deletePlaylist(userId, playlistId);
-            event.editMessage(deleted ? EmbedHelper.MSG_SUCCESS + " Playlist deleted." : EmbedHelper.MSG_ERROR + " Deletion failed.")
-                    .setComponents().queue();
+            event.editComponents(Container.of(
+                TextDisplay.of(deleted ? EmbedHelper.MSG_SUCCESS + " Playlist deleted." : EmbedHelper.MSG_ERROR + " Deletion failed.")
+            ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             return;
         }
         if (id.startsWith("pl_delcancel_")) {
-            if (!id.endsWith(userId)) { event.reply("Not yours.").setEphemeral(true).queue(); return; }
-            event.editMessage("Cancelled.").setComponents().queue();
+            if (!id.endsWith(userId)) { replyError(event, "Not yours."); return; }
+            event.editComponents(Container.of(
+                TextDisplay.of("Cancelled.")
+            ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             return;
         }
 
         // Favorites clear confirmation
         if (id.startsWith("fav_clearconfirm_")) {
-            if (!id.endsWith(userId)) { event.reply("Not yours.").setEphemeral(true).queue(); return; }
+            if (!id.endsWith(userId)) { replyError(event, "Not yours."); return; }
             int cleared = PlaylistManager.getInstance().clearFavorites(userId);
-            event.editMessage(EmbedHelper.MSG_SUCCESS + " Cleared " + cleared + " favorites.").setComponents().queue();
+            event.editComponents(Container.of(
+                TextDisplay.of(EmbedHelper.MSG_SUCCESS + " Cleared " + cleared + " favorites.")
+            ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             return;
         }
         if (id.startsWith("fav_clearcancel_")) {
-            if (!id.endsWith(userId)) { event.reply("Not yours.").setEphemeral(true).queue(); return; }
-            event.editMessage("Cancelled.").setComponents().queue();
+            if (!id.endsWith(userId)) { replyError(event, "Not yours."); return; }
+            event.editComponents(Container.of(
+                TextDisplay.of("Cancelled.")
+            ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             return;
         }
 
         // Import conflict resolution
         if (id.startsWith("import_replace_")) {
-            if (!id.endsWith(userId)) { event.reply("Not yours.").setEphemeral(true).queue(); return; }
+            if (!id.endsWith(userId)) { replyError(event, "Not yours."); return; }
             var importData = PlaylistCommand.ImportCache.get(userId);
-            if (importData == null) { event.editMessage("Import expired.").setComponents().queue(); return; }
+            if (importData == null) { event.editComponents(Container.of(TextDisplay.of(EmbedHelper.MSG_ERROR + " Import expired.")).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue(); return; }
             PlaylistData existing = PlaylistManager.getInstance().findPlaylistByName(userId, importData.name());
             if (existing != null) {
                 PlaylistManager.getInstance().replacePlaylist(userId, existing.getId(), importData.tracks());
-                event.editMessage(EmbedHelper.MSG_SUCCESS + " Replaced **" + importData.name() + "** with " + importData.tracks().size() + " tracks").setComponents().queue();
+                event.editComponents(Container.of(
+                    TextDisplay.of(EmbedHelper.MSG_SUCCESS + " Replaced **" + importData.name() + "** with " + importData.tracks().size() + " tracks")
+                ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             } else {
-                event.editMessage(EmbedHelper.MSG_ERROR + " Original playlist not found.").setComponents().queue();
+                event.editComponents(Container.of(
+                    TextDisplay.of(EmbedHelper.MSG_ERROR + " Original playlist not found.")
+                ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             }
             return;
         }
         if (id.startsWith("import_rename_")) {
-            if (!id.endsWith(userId)) { event.reply("Not yours.").setEphemeral(true).queue(); return; }
+            if (!id.endsWith(userId)) { replyError(event, "Not yours."); return; }
             var importData = PlaylistCommand.ImportCache.get(userId);
-            if (importData == null) { event.editMessage("Import expired.").setComponents().queue(); return; }
+            if (importData == null) { event.editComponents(Container.of(TextDisplay.of(EmbedHelper.MSG_ERROR + " Import expired.")).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue(); return; }
             // Auto-rename with suffix
             String newName = importData.name();
             for (int i = 2; i <= 99; i++) {
@@ -179,16 +188,22 @@ public class InteractionHandler {
             }
             PlaylistData imported = PlaylistManager.getInstance().importPlaylist(userId, newName, importData.tracks());
             if (imported != null) {
-                event.editMessage(EmbedHelper.MSG_SUCCESS + " Imported as **" + imported.getName() + "** with " + imported.getTracks().size() + " tracks").setComponents().queue();
+                event.editComponents(Container.of(
+                    TextDisplay.of(EmbedHelper.MSG_SUCCESS + " Imported as **" + imported.getName() + "** with " + imported.getTracks().size() + " tracks")
+                ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             } else {
-                event.editMessage(EmbedHelper.MSG_ERROR + " Import failed.").setComponents().queue();
+                event.editComponents(Container.of(
+                    TextDisplay.of(EmbedHelper.MSG_ERROR + " Import failed.")
+                ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             }
             return;
         }
         if (id.startsWith("import_cancel_")) {
-            if (!id.endsWith(userId)) { event.reply("Not yours.").setEphemeral(true).queue(); return; }
+            if (!id.endsWith(userId)) { replyError(event, "Not yours."); return; }
             PlaylistCommand.ImportCache.get(userId); // consume and discard
-            event.editMessage("Import cancelled.").setComponents().queue();
+            event.editComponents(Container.of(
+                TextDisplay.of("Import cancelled.")
+            ).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
             return;
         }
 
@@ -220,7 +235,7 @@ public class InteractionHandler {
                 String action = parts[3];
                 int currentPage = Integer.parseInt(parts[4]);
                 PlaylistData pl = PlaylistManager.getInstance().getPlaylist(ownerUserId, playlistId);
-                if (pl == null) { event.reply("Playlist not found.").setEphemeral(true).queue(); return; }
+                if (pl == null) { replyError(event, "Playlist not found."); return; }
                 int maxPages = Math.max(1, (int) Math.ceil(pl.getTracks().size() / 10.0));
                 int newPage = calcNewPage(action, currentPage, maxPages);
                 var container = EmbedHelper.createPlaylistTracksContainer(pl, newPage, "pltracks_" + playlistId + "_" + ownerUserId);
@@ -240,7 +255,7 @@ public class InteractionHandler {
                 int currentPage = Integer.parseInt(parts[3]);
                 com.discord.musicbot.lyrics.LyricsCache.LyricsData data = com.discord.musicbot.lyrics.LyricsCache.get(lyricsId);
                 if (data == null) {
-                    event.reply("This lyrics session has expired. Please run /lyrics again.").setEphemeral(true).queue();
+                    replyError(event, "This lyrics session has expired. Please run /lyrics again.");
                     return;
                 }
                 int maxPages = data.pages.size();
@@ -258,7 +273,7 @@ public class InteractionHandler {
                 event.editComponents(container).useComponentsV2().queue();
             }
         } catch (NumberFormatException e) {
-            event.reply("Invalid pagination data.").setEphemeral(true).queue();
+            replyError(event, "Invalid pagination data.");
         }
     }
 
@@ -307,13 +322,13 @@ public class InteractionHandler {
             int newPage = calcNewPage(action, currentPage, maxPages);
     
             if (filteredSize == 0) {
-                event.reply("No tracks in the queue.").setEphemeral(true).queue();
+                replyError(event, "No tracks in the queue.");
                 return;
             }
             var container = EmbedHelper.createQueueContainer(manager, newPage, filterUserId);
             event.editComponents(container).useComponentsV2().queue();
         } catch (NumberFormatException e) {
-            event.reply("Invalid pagination data.").setEphemeral(true).queue();
+            replyError(event, "Invalid pagination data.");
         }
     }
 
@@ -325,7 +340,7 @@ public class InteractionHandler {
         }
 
         if (manager.getPlayer().getPlayingTrack() == null) {
-            event.reply("No track is currently playing.").setEphemeral(true).queue();
+            replyError(event, "No track is currently playing.");
             return;
         }
 
@@ -333,7 +348,7 @@ public class InteractionHandler {
         var userState = event.getMember().getVoiceState();
         var botState = event.getGuild().getSelfMember().getVoiceState();
         if (userState == null || !userState.inAudioChannel() || botState == null || !botState.inAudioChannel() || !userState.getChannel().equals(botState.getChannel())) {
-            event.reply("You must be in the same voice channel to use these buttons!").setEphemeral(true).queue();
+            replyError(event, "You must be in the same voice channel to use these buttons!");
             return;
         }
 
@@ -358,12 +373,12 @@ public class InteractionHandler {
                             .setAllowedMentions(java.util.Collections.emptyList())
                             .queue();
                 } else {
-                    event.reply(EmbedHelper.MSG_SUCCESS + " Playback is now **" + (manager.getScheduler().isPaused() ? "Paused" : "Resumed") + "**").setEphemeral(true).queue();
+                    replySuccess(event, "Playback is now **" + (manager.getScheduler().isPaused() ? "Paused" : "Resumed") + "**");
                 }
                 break;
             case "np_skip":
                 if (manager.getScheduler().getQueueSize() == 0 && !manager.getScheduler().getAutoplay() && !manager.getScheduler().isRandomPlay() && manager.getScheduler().getLoopMode() != com.discord.musicbot.audio.TrackScheduler.LoopMode.TRACK) {
-                    event.reply("No tracks in queue to skip to.").setEphemeral(true).queue();
+                    replyError(event, "No tracks in queue to skip to.");
                 } else {
                     event.deferEdit().queue();
                     manager.getScheduler().nextTrack();
@@ -371,7 +386,7 @@ public class InteractionHandler {
                 break;
             case "np_previous":
                 if (!manager.getScheduler().hasHistory()) {
-                    event.reply("No previous track in history.").setEphemeral(true).queue();
+                    replyError(event, "No previous track in history.");
                 } else {
                     event.deferEdit().queue();
                     manager.getScheduler().previousTrack();
@@ -380,7 +395,7 @@ public class InteractionHandler {
 
             case "np_shuffle":
                 manager.getScheduler().shuffle();
-                event.reply("Queue shuffled!").setEphemeral(true).queue();
+                replySuccess(event, "Queue shuffled!");
                 manager.updateNowPlayingMessage();
                 break;
             case "np_loop":
@@ -392,12 +407,12 @@ public class InteractionHandler {
                             .setAllowedMentions(java.util.Collections.emptyList())
                             .queue();
                 } else {
-                    event.reply(EmbedHelper.MSG_SUCCESS + " Loop mode set to: **" + loopMode.name() + "** (Will apply when songs start playing)").setEphemeral(true).queue();
+                    replySuccess(event, "Loop mode set to: **" + loopMode.name() + "** (Will apply when songs start playing)");
                 }
                 break;
             case "np_queue":
                 if (manager.getScheduler().getQueueSize() == 0) {
-                    event.reply("No tracks in the queue.").setEphemeral(true).queue();
+                    replyError(event, "No tracks in the queue.");
                     break;
                 }
                 event.replyComponents(EmbedHelper.createQueueContainer(manager, 1, null))
@@ -416,7 +431,7 @@ public class InteractionHandler {
                             .setAllowedMentions(java.util.Collections.emptyList())
                             .queue();
                 } else {
-                    event.reply(EmbedHelper.MSG_SUCCESS + " Volume decreased to **" + newVolDown + "%**").setEphemeral(true).queue();
+                    replySuccess(event, "Volume decreased to **" + newVolDown + "%**");
                 }
                 break;
             case "np_volup":
@@ -429,11 +444,11 @@ public class InteractionHandler {
                             .setAllowedMentions(java.util.Collections.emptyList())
                             .queue();
                 } else {
-                    event.reply(EmbedHelper.MSG_SUCCESS + " Volume increased to **" + newVolUp + "%**").setEphemeral(true).queue();
+                    replySuccess(event, "Volume increased to **" + newVolUp + "%**");
                 }
                 break;
             case "np_stop":
-                event.reply("Stopped playback and cleared the queue.").setEphemeral(true).queue();
+                replySuccess(event, "Stopped playback and cleared the queue.");
                 manager.getScheduler().stop();
                 break;
         }
@@ -442,7 +457,7 @@ public class InteractionHandler {
     private static void handleFavoriteButton(ButtonInteractionEvent event, MusicManager manager) {
         AudioTrack track = manager.getPlayer().getPlayingTrack();
         if (track == null) {
-            event.reply(EmbedHelper.MSG_ERROR + " Nothing is playing.").setEphemeral(true).queue();
+            replyError(event, "Nothing is playing.");
             return;
         }
         String userId = event.getUser().getId();
@@ -451,7 +466,7 @@ public class InteractionHandler {
         String result = PlaylistManager.getInstance().addTrack(userId, fav.getId(), pt);
         switch (result) {
             case "ok" -> {
-                event.reply(EmbedHelper.MSG_SUCCESS + " Added to favorites!").setEphemeral(true).queue();
+                replySuccess(event, "Added to favorites!");
                 
                 // DJ Economy: Award point to the requester if it's someone else
                 Object ud = track.getUserData();
@@ -468,9 +483,9 @@ public class InteractionHandler {
                     com.discord.musicbot.data.StatsManager.getInstance().addDjPoints(requesterId, 1);
                 }
             }
-            case "duplicate" -> event.reply(EmbedHelper.MSG_ERROR + " Already in favorites.").setEphemeral(true).queue();
-            case "limit" -> event.reply(EmbedHelper.MSG_ERROR + " Favorites limit reached.").setEphemeral(true).queue();
-            default -> event.reply(EmbedHelper.MSG_ERROR + " Failed to add.").setEphemeral(true).queue();
+            case "duplicate" -> replyError(event, "Already in favorites.");
+            case "limit" -> replyError(event, "Favorites limit reached.");
+            default -> replyError(event, "Failed to add.");
         }
     }
 
@@ -488,13 +503,13 @@ public class InteractionHandler {
                 String userId = parts[2];
                 
                 if (!event.getUser().getId().equals(userId)) {
-                    event.reply("This search menu is not for you!").setEphemeral(true).queue();
+                    replyError(event, "This search menu is not for you!");
                     return;
                 }
                 
                 List<AudioTrack> results = com.discord.musicbot.commands.music.SearchCommand.searchCache.get(searchId);
                 if (results == null) {
-                    event.reply("This search session has expired.").setEphemeral(true).queue();
+                    replyError(event, "This search session has expired.");
                     return;
                 }
                 
@@ -519,7 +534,7 @@ public class InteractionHandler {
             } else if (event.getComponentId().startsWith("clear_data_")) {
                 String userId = event.getComponentId().substring("clear_data_".length());
                 if (!event.getUser().getId().equals(userId)) {
-                    event.reply("This menu is not for you!").setEphemeral(true).queue();
+                    replyError(event, "This menu is not for you!");
                     return;
                 }
                 List<String> values = event.getValues();
@@ -553,9 +568,21 @@ public class InteractionHandler {
             }
         } catch (Exception e) {
             org.slf4j.LoggerFactory.getLogger(InteractionHandler.class).error("Error in handleSelectMenu", e);
-            if (!event.isAcknowledged()) {
-                event.reply("An error occurred processing the menu.").setEphemeral(true).queue();
-            }
+            replyError(event, "An error occurred processing the menu.");
         }
+    }
+
+    private static void replyError(net.dv8tion.jda.api.interactions.callbacks.IReplyCallback event, String msg) {
+        String content = msg.startsWith(EmbedHelper.MSG_ERROR) ? msg : EmbedHelper.MSG_ERROR + " " + msg;
+        var container = Container.of(TextDisplay.of(content)).withAccentColor(EmbedHelper.COLOR_MAIN);
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue();
+        else event.replyComponents(container).useComponentsV2().setEphemeral(true).queue();
+    }
+
+    private static void replySuccess(net.dv8tion.jda.api.interactions.callbacks.IReplyCallback event, String msg) {
+        String content = msg.startsWith(EmbedHelper.MSG_SUCCESS) ? msg : EmbedHelper.MSG_SUCCESS + " " + msg;
+        var container = Container.of(TextDisplay.of(content)).withAccentColor(EmbedHelper.COLOR_MAIN);
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue();
+        else event.replyComponents(container).useComponentsV2().setEphemeral(true).queue();
     }
 }

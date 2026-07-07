@@ -17,6 +17,8 @@ import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 
 import java.util.List;
 import java.util.Random;
@@ -45,7 +47,7 @@ public class PlayRandomCommand extends SlashCommand {
                 return;
             }
             PlaylistTrack pt = favs.getTracks().get(random.nextInt(favs.getTracks().size()));
-            trackQuery = pt.getUri() != null ? pt.getUri() : "ytmsearch:" + pt.getAuthor() + " " + pt.getTitle();
+            trackQuery = pt.getUri() != null ? pt.getUri() : pt.getTitle() + " " + pt.getAuthor();
             trackTitle = pt.getTitle();
         } else {
             List<HistoryEntry> history = HistoryManager.getInstance().getRecent(200);
@@ -54,21 +56,23 @@ public class PlayRandomCommand extends SlashCommand {
                 return;
             }
             HistoryEntry he = history.get(random.nextInt(history.size()));
-            trackQuery = he.uri != null ? he.uri : "ytmsearch:" + he.author + " " + he.title;
+            trackQuery = he.uri != null ? he.uri : he.title + " " + he.author;
             trackTitle = he.title;
         }
 
         final String finalQuery = trackQuery;
         
-        ctx.getEvent().reply(EmbedHelper.MSG_SUCCESS + " Found random track: **" + trackTitle + "**. Loading...").queue(
+        ctx.getEvent().replyComponents(
+            Container.of(TextDisplay.of(EmbedHelper.MSG_SUCCESS + " Found random track: **" + trackTitle + "**. Loading...")).withAccentColor(EmbedHelper.COLOR_MAIN)
+        ).useComponentsV2().queue(
             hook -> {
                 String requesterId = ctx.getUser().getId();
-                PlayerManager.getInstance().loadItemWithFallback(ctx.getGuild(), finalQuery, new AudioLoadResultHandler() {
+                PlayerManager.getInstance().loadItemOrdered(ctx.getGuild(), finalQuery, new AudioLoadResultHandler() {
                     @Override
                     public void trackLoaded(AudioTrack track) {
                         track.setUserData("{\"requester\":\"" + requesterId + "\"}");
                         ctx.getScheduler().queue(track);
-                        hook.editOriginal(EmbedHelper.MSG_SUCCESS + " Queued random track: **" + track.getInfo().title + "**").queue();
+                        hook.editOriginalComponents(Container.of(TextDisplay.of(EmbedHelper.MSG_SUCCESS + " Queued random track: **" + track.getInfo().title + "**")).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
                     }
 
                     @Override
@@ -82,12 +86,12 @@ public class PlayRandomCommand extends SlashCommand {
 
                     @Override
                     public void noMatches() {
-                        hook.editOriginal(EmbedHelper.MSG_ERROR + " Could not resolve the selected random track.").queue();
+                        hook.editOriginalComponents(Container.of(TextDisplay.of(EmbedHelper.MSG_ERROR + " Could not resolve the selected random track.")).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
                     }
 
                     @Override
                     public void loadFailed(FriendlyException exception) {
-                        hook.editOriginal(EmbedHelper.MSG_ERROR + " Failed to load random track: " + exception.getMessage()).queue();
+                        hook.editOriginalComponents(Container.of(TextDisplay.of(EmbedHelper.MSG_ERROR + " Failed to load random track: " + exception.getMessage())).withAccentColor(EmbedHelper.COLOR_MAIN)).useComponentsV2().queue();
                     }
                 });
             }
