@@ -72,9 +72,24 @@ src/main/java/com/discord/musicbot/test/
 logs/
 node_modules/
 
-# Runtime data files
-emojis.json
+# Runtime data files and directories
+database.json
+sessions.json
+history.json
+history/
 playlists/
 stats.json
+stats/
 guild_settings.json
 saved_queues.json
+saved_queues/
+excludes.json
+user_excludes.json
+favorites.json
+favorites/
+emojis.json
+initial-state.json
+spotify_state.json
+spotify_album_state.json
+*.tmp
+*.corrupt.*

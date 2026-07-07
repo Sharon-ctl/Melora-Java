@@ -294,14 +294,9 @@ public class MusicManager {
             try {
                 logger.info("Idle timeout reached for guild: {}", guild.getName());
 
-                // Send Bye Message
-                try {
-                    net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = getAnnouncementChannel();
-                    if (ch != null) {
-                        ch.sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
-                                + " Disconnected due to inactivity. Bye!").queue();
-                    }
-                } catch (Exception ignored) {}
+                // Send Bye Message as V2 Container
+                sendSimpleEmbed(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
+                        + " **Session Ended** — I've left the voice channel due to inactivity. Use `/play` to start a new session anytime!");
 
                 disconnect();
             } catch (Exception e) {

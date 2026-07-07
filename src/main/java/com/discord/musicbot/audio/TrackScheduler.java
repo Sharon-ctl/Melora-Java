@@ -453,14 +453,19 @@ public class TrackScheduler extends AudioEventAdapter {
             musicManager.startIdleTimeout();
             musicManager.notifySessionChanged();
 
-            // Send "Queue ended" message to text channel
+            // Send "Queue ended" message as V2 Container
             if (musicManager.getNowPlayingChannelId() != null) {
                 try {
                     net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = musicManager.getGuild()
                         .getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class,
                                 musicManager.getNowPlayingChannelId());
                     if (ch != null) {
-                        ch.sendMessage(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP + " Queue ended.").queue();
+                        var container = net.dv8tion.jda.api.components.container.Container.of(
+                                net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(
+                                        com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
+                                        + " **Queue Complete** — All tracks have finished playing! Use `/play` to add more songs or `/autoplay` to keep the music going.")
+                        ).withAccentColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN);
+                        ch.sendMessageComponents(container).useComponentsV2().queue();
                     }
                 } catch (Exception ignored) {}
             }
