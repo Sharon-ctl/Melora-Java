@@ -57,9 +57,14 @@ public class PlayerManager {
         playerManager.getConfiguration().setFilterHotSwapEnabled(true);
         playerManager.setFrameBufferDuration(1000);
 
-        // --- Register YouTube Source (v2) ---
+        // --- Register YouTube Source (v2) with all available resilient clients ---
         YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(true,
+                new dev.lavalink.youtube.clients.Tv(),
+                new dev.lavalink.youtube.clients.AndroidVr(),
                 new dev.lavalink.youtube.clients.Music(),
+                new dev.lavalink.youtube.clients.Ios(),
+                new dev.lavalink.youtube.clients.Android(),
+                new dev.lavalink.youtube.clients.MWeb(),
                 new dev.lavalink.youtube.clients.Web(),
                 new dev.lavalink.youtube.clients.AndroidMusic(),
                 new dev.lavalink.youtube.clients.TvHtml5Simply(),
