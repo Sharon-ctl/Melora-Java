@@ -19,7 +19,7 @@ public class PlayNextCommand extends SlashCommand {
         String query = ctx.getOption("query").getAsString();
         ctx.deferReply();
         if (!query.startsWith("http") && !query.contains(":")) {
-            query = "ytsearch:" + query;
+            query = "ytmsearch:" + query;
         }
         PlayerManager.getInstance().loadAndInsert(ctx.getEvent(), query, 0);
     }

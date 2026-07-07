@@ -165,44 +165,19 @@ public class AutocompleteHandler {
             choices.add(new Command.Choice(label, h.uri));
         }
 
-        // If user typed something, search Lavaplayer for exact video titles
-        if (value.length() >= 2 && !value.startsWith("http")) {
-            com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager apm = com.discord.musicbot.audio.PlayerManager
-                    .getInstance().getPlayerManager();
+        // If user typed something, search Spotify for exact studio song titles and artists
+        if (value.length() >= 2 && !value.startsWith("http") && !value.startsWith("scsearch:") && !value.startsWith("ytsearch:") && !value.startsWith("ytmsearch:")) {
             final List<Command.Choice> finalChoices = new ArrayList<>(choices);
-
-            apm.loadItem("ytsearch:" + value, new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
-                @Override
-                public void trackLoaded(com.sedmelluq.discord.lavaplayer.track.AudioTrack track) {
-                    String title = track.getInfo().title;
-                    if (title.length() > 95)
-                        title = title.substring(0, 95) + "...";
-                    finalChoices.add(new Command.Choice("🔎 " + title, track.getInfo().uri));
-                    event.replyChoices(finalChoices).queue();
+            com.discord.musicbot.audio.PlayerManager.getInstance().searchSpotify(value).thenAccept(results -> {
+                for (com.discord.musicbot.audio.PlayerManager.SpotifyMetadata meta : results) {
+                    if (finalChoices.size() >= 25) break;
+                    String label = "🎵 " + meta.title() + " — " + meta.artist();
+                    if (label.length() > 95) label = label.substring(0, 95) + "...";
+                    String val = meta.spotifyUrl() != null ? meta.spotifyUrl() : meta.title() + " " + meta.artist();
+                    if (val.length() > 100) val = val.substring(0, 100);
+                    finalChoices.add(new Command.Choice(label, val));
                 }
-
-                @Override
-                public void playlistLoaded(com.sedmelluq.discord.lavaplayer.track.AudioPlaylist playlist) {
-                    for (com.sedmelluq.discord.lavaplayer.track.AudioTrack track : playlist.getTracks()) {
-                        if (finalChoices.size() >= 25)
-                            break;
-                        String title = track.getInfo().title;
-                        if (title.length() > 95)
-                            title = title.substring(0, 95) + "...";
-                        finalChoices.add(new Command.Choice("🔎 " + title, track.getInfo().uri));
-                    }
-                    event.replyChoices(finalChoices).queue();
-                }
-
-                @Override
-                public void noMatches() {
-                    event.replyChoices(finalChoices).queue();
-                }
-
-                @Override
-                public void loadFailed(com.sedmelluq.discord.lavaplayer.tools.FriendlyException exception) {
-                    event.replyChoices(finalChoices).queue();
-                }
+                event.replyChoices(finalChoices).queue();
             });
             return; // Return early because reply is handled asynchronously
         }

@@ -3,6 +3,8 @@ package com.discord.musicbot.commands.admin;
 import com.discord.musicbot.commands.framework.CommandContext;
 import com.discord.musicbot.commands.framework.EmbedHelper;
 import com.discord.musicbot.commands.framework.SlashCommand;
+import net.dv8tion.jda.api.components.container.Container;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 
@@ -18,9 +20,10 @@ public class PingCommand extends SlashCommand {
         ctx.getEvent().deferReply().queue(hook -> {
             long restPing = System.currentTimeMillis() - timeBefore;
             long gatewayPing = ctx.getEvent().getJDA().getGatewayPing();
-            hook.sendMessage(
-                    EmbedHelper.MSG_SUCCESS + String.format(" Gateway: `%dms` REST: `%dms`", gatewayPing, restPing))
-                    .queue();
+            var container = Container.of(
+                    TextDisplay.of(String.format("### 🏓 Pong!\n**Gateway Ping:** `%dms`\n**REST Ping:** `%dms`", gatewayPing, restPing))
+            ).withAccentColor(EmbedHelper.COLOR_MAIN);
+            hook.sendMessageComponents(container).useComponentsV2().queue();
         });
     }
 

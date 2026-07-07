@@ -64,7 +64,7 @@ public class AutoplayCommand extends SlashCommand {
         if (seed.uri != null && seed.uri.startsWith("http")) {
             query = seed.uri;
         } else {
-            query = "ytsearch:" + seed.author + " " + seed.title;
+            query = "ytmsearch:" + seed.author + " " + seed.title;
         }
 
         PlayerManager.getInstance().loadAndPlay(ctx.getEvent(), query);

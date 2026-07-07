@@ -45,7 +45,7 @@ public class PlayRandomCommand extends SlashCommand {
                 return;
             }
             PlaylistTrack pt = favs.getTracks().get(random.nextInt(favs.getTracks().size()));
-            trackQuery = pt.getUri() != null ? pt.getUri() : "ytsearch:" + pt.getAuthor() + " " + pt.getTitle();
+            trackQuery = pt.getUri() != null ? pt.getUri() : "ytmsearch:" + pt.getAuthor() + " " + pt.getTitle();
             trackTitle = pt.getTitle();
         } else {
             List<HistoryEntry> history = HistoryManager.getInstance().getRecent(200);
@@ -54,7 +54,7 @@ public class PlayRandomCommand extends SlashCommand {
                 return;
             }
             HistoryEntry he = history.get(random.nextInt(history.size()));
-            trackQuery = he.uri != null ? he.uri : "ytsearch:" + he.author + " " + he.title;
+            trackQuery = he.uri != null ? he.uri : "ytmsearch:" + he.author + " " + he.title;
             trackTitle = he.title;
         }
 
@@ -63,7 +63,7 @@ public class PlayRandomCommand extends SlashCommand {
         ctx.getEvent().reply(EmbedHelper.MSG_SUCCESS + " Found random track: **" + trackTitle + "**. Loading...").queue(
             hook -> {
                 String requesterId = ctx.getUser().getId();
-                PlayerManager.getInstance().loadItemOrdered(ctx.getGuild(), finalQuery, new AudioLoadResultHandler() {
+                PlayerManager.getInstance().loadItemWithFallback(ctx.getGuild(), finalQuery, new AudioLoadResultHandler() {
                     @Override
                     public void trackLoaded(AudioTrack track) {
                         track.setUserData("{\"requester\":\"" + requesterId + "\"}");

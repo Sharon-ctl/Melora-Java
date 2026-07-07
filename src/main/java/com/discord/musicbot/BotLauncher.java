@@ -99,8 +99,10 @@ public class BotLauncher {
                                 PlayerManager.getInstance().shutdown();
                                 for (net.dv8tion.jda.api.entities.Guild guild : jda.getGuilds()) {
                                         try {
-                                                guild.getAudioManager().closeAudioConnection();
-                                                jda.getDirectAudioController().disconnect(guild);
+                                                if (guild.getSelfMember().getVoiceState() != null && guild.getSelfMember().getVoiceState().inAudioChannel()) {
+                                                        guild.getAudioManager().closeAudioConnection();
+                                                        jda.getDirectAudioController().disconnect(guild);
+                                                }
                                         } catch (Exception ignored) {}
                                 }
                                 com.discord.musicbot.data.SessionManager.getInstance().saveAllNow();
@@ -110,10 +112,6 @@ public class BotLauncher {
                                 com.discord.musicbot.data.GuildSettingsManager.getInstance().save();
                                 if (activityExecutor != null) {
                                         activityExecutor.shutdownNow();
-                                }
-                                try {
-                                        Thread.sleep(2000); // Give time for message deletion
-                                } catch (InterruptedException e) {
                                 }
                                 jda.shutdown();
                                 try {

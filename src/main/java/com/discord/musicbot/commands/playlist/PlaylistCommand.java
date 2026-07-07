@@ -171,7 +171,7 @@ public class PlaylistCommand extends SlashCommand {
             // Resolve track from query
             ctx.deferReply();
             String query = queryOpt.getAsString();
-            if (!query.startsWith("http") && !query.contains(":")) query = "ytsearch:" + query;
+            if (!query.startsWith("http") && !query.contains(":")) query = "ytmsearch:" + query;
             resolveAndAddTrack(ctx, pl, query);
         }
     }
@@ -468,7 +468,7 @@ public class PlaylistCommand extends SlashCommand {
                 );
                 String query = pt.getUri() != null && !pt.getUri().isEmpty() 
                                ? pt.getUri() 
-                               : "ytsearch:" + pt.getTitle() + " " + (pt.getAuthor() != null ? pt.getAuthor() : "");
+                               : "ytmsearch:" + pt.getTitle() + " " + (pt.getAuthor() != null ? pt.getAuthor() : "");
                 track = new com.discord.musicbot.audio.DeferredTrack(info, query, null);
             }
             if (pl.isMewsic()) {
@@ -505,7 +505,7 @@ public class PlaylistCommand extends SlashCommand {
         }
         // Fallback: search by title + author
         if (pt.getTitle() != null && !pt.getTitle().isEmpty()) {
-            String search = "ytsearch:" + pt.getTitle() + " " + (pt.getAuthor() != null ? pt.getAuthor() : "");
+            String search = "ytmsearch:" + pt.getTitle() + " " + (pt.getAuthor() != null ? pt.getAuthor() : "");
             return loadSingle(search.trim(), guild);
         }
         return null;

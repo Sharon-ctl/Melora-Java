@@ -32,7 +32,7 @@ public class SearchCommand extends SlashCommand {
         
         ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
 
-        com.discord.musicbot.audio.PlayerManager.getInstance().getPlayerManager().loadItemOrdered(ctx.getMusicManager(), "ytsearch:" + query, new AudioLoadResultHandler() {
+        com.discord.musicbot.audio.PlayerManager.getInstance().loadItemWithFallback(ctx.getMusicManager(), "ytmsearch:" + query, new AudioLoadResultHandler() {
             @Override
             public void trackLoaded(AudioTrack track) {
                 track.setUserData("{\"requester\":\"" + ctx.getMember().getId() + "\"}");

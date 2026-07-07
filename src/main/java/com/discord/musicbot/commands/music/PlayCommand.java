@@ -23,7 +23,7 @@ public class PlayCommand extends SlashCommand {
         ctx.deferReply();
         ctx.getMusicManager().setNowPlayingChannel(ctx.getChannel().getId());
         if (!query.startsWith("http") && !query.contains(":")) {
-            query = "ytsearch:" + query;
+            query = "ytmsearch:" + query;
         }
         PlayerManager.getInstance().loadAndPlay(ctx.getEvent(), query);
     }

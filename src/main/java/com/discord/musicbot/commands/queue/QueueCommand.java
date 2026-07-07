@@ -203,7 +203,7 @@ public class QueueCommand extends SlashCommand {
                 int queued = 0;
                 String requesterId = ctx.getUser().getId();
                 for (PlaylistTrack pt : tracks) {
-                    com.discord.musicbot.audio.PlayerManager.getInstance().loadItemOrdered(ctx.getGuild(), pt.getUri() != null ? pt.getUri() : "ytsearch:" + pt.getAuthor() + " " + pt.getTitle(), new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
+                    com.discord.musicbot.audio.PlayerManager.getInstance().loadItemWithFallback(ctx.getGuild(), pt.getUri() != null ? pt.getUri() : "ytmsearch:" + pt.getAuthor() + " " + pt.getTitle(), new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
                         @Override
                         public void trackLoaded(AudioTrack track) {
                             track.setUserData("{\"requester\":\"" + requesterId + "\"}");

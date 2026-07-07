@@ -445,6 +445,12 @@ public class MusicManager {
     }
 
     private String getArtworkUrl(AudioTrack track) {
+        if (track instanceof DeferredTrack def && def.getArtworkUrl() != null) {
+            return def.getArtworkUrl();
+        }
+        if (track instanceof SpotifyResolvedTrack srt && srt.getArtworkUrl() != null) {
+            return srt.getArtworkUrl();
+        }
         if (track.getInfo().artworkUrl != null) {
             return track.getInfo().artworkUrl;
         }
@@ -874,7 +880,7 @@ public class MusicManager {
         snapshot.textChannelId = nowPlayingChannelId;
 
         AudioTrack current = scheduler.getCurrentTrack();
-        if (current != null && !(current instanceof DeferredTrack)) {
+        if (current != null) {
             snapshot.currentTrackEncoded = PlayerManager.getInstance().encodeAudioTrack(current);
             snapshot.currentPosition = current.getPosition();
             // Preserve requester info
@@ -886,16 +892,6 @@ public class MusicManager {
         List<String> encodedQueue = new ArrayList<>();
         List<String> queueRequesters = new ArrayList<>();
         for (AudioTrack t : scheduler.getQueue()) {
-            if (t instanceof DeferredTrack deferred) {
-                String encoded = "DEFERRED|||" + deferred.getQuery() + "|||" + (deferred.getArtworkUrl() == null ? "null" : deferred.getArtworkUrl());
-                encodedQueue.add(encoded);
-                if (t.getUserData() instanceof String) {
-                    queueRequesters.add((String) t.getUserData());
-                } else {
-                    queueRequesters.add(null);
-                }
-                continue;
-            }
             String encoded = PlayerManager.getInstance().encodeAudioTrack(t);
             if (encoded != null) {
                 encodedQueue.add(encoded);
@@ -967,23 +963,6 @@ public class MusicManager {
 
         if (snapshot.queueEncoded != null) {
             for (int i = 0; i < snapshot.queueEncoded.size(); i++) {
-                if (snapshot.queueEncoded.get(i).startsWith("DEFERRED|||") || snapshot.queueEncoded.get(i).startsWith("DEFERRED:")) {
-                    String delimiter = snapshot.queueEncoded.get(i).contains("|||") ? "\\|\\|\\|" : ":";
-                    String[] parts = snapshot.queueEncoded.get(i).split(delimiter, 3);
-                    if (parts.length >= 3) {
-                        String query = parts[1];
-                        String art = parts[2].equals("null") ? null : parts[2];
-                        com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo info = new com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo(
-                                query.replace("ytsearch:", ""), "Spotify", 0, "spotify", true, query);
-                        DeferredTrack track = new DeferredTrack(info, query, art);
-                        if (snapshot.queueRequesters != null && i < snapshot.queueRequesters.size()
-                                && snapshot.queueRequesters.get(i) != null) {
-                            track.setUserData(snapshot.queueRequesters.get(i));
-                        }
-                        scheduler.getQueueRaw().add(track);
-                    }
-                    continue;
-                }
                 AudioTrack track = PlayerManager.getInstance().decodeAudioTrack(snapshot.queueEncoded.get(i));
                 if (track != null) {
                     // Restore requester userData for queued tracks
@@ -1071,10 +1050,12 @@ public class MusicManager {
      */
     public void cleanup() {
         markDeliberateDisconnect();
-        try {
-            SessionManager.getInstance().updateSnapshot(guild.getId(), toSessionSnapshot()); // Force save before shutdown (must be done before closeAudioConnection)
-        } catch (Exception e) {
-            logger.warn("Failed to force save session: {}", e.getMessage());
+        if (!PlayerManager.isShuttingDown) {
+            try {
+                SessionManager.getInstance().updateSnapshot(guild.getId(), toSessionSnapshot()); // Force save before shutdown (must be done before closeAudioConnection)
+            } catch (Exception e) {
+                logger.warn("Failed to force save session: {}", e.getMessage());
+            }
         }
 
         // Send voice disconnection opcode immediately over WebSocket before blocking on REST API calls
@@ -1083,29 +1064,30 @@ public class MusicManager {
             guild.getJDA().getDirectAudioController().disconnect(guild);
         } catch (Exception ignored) {}
 
-        // Clear Voice Channel Status with a timeout
-        try {
-            var voiceState = guild.getSelfMember().getVoiceState();
-            if (voiceState != null && voiceState.getChannel() instanceof net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel vc) {
-                vc.modifyStatus("").submit().get(2, java.util.concurrent.TimeUnit.SECONDS);
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to clear VC status on shutdown: {}", e.getMessage());
-        }
-
-        // Delete now playing message with a timeout
-        try {
-            if (nowPlayingMessageId != null && nowPlayingChannelId != null) {
-                net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = guild
-                        .getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class,
-                                nowPlayingChannelId);
-                if (ch != null) {
-                    ch.deleteMessageById(nowPlayingMessageId).submit().get(2, java.util.concurrent.TimeUnit.SECONDS);
+        // Clear Voice Channel Status and delete now playing message only if not during global shutdown
+        if (!PlayerManager.isShuttingDown) {
+            try {
+                var voiceState = guild.getSelfMember().getVoiceState();
+                if (voiceState != null && voiceState.getChannel() instanceof net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel vc) {
+                    vc.modifyStatus("").submit().get(2, java.util.concurrent.TimeUnit.SECONDS);
                 }
-                nowPlayingMessageId = null;
+            } catch (Exception e) {
+                logger.warn("Failed to clear VC status on shutdown: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            logger.warn("Failed to delete NP message on shutdown: {}", e.getMessage());
+
+            try {
+                if (nowPlayingMessageId != null && nowPlayingChannelId != null) {
+                    net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = guild
+                            .getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class,
+                                    nowPlayingChannelId);
+                    if (ch != null) {
+                        ch.deleteMessageById(nowPlayingMessageId).submit().get(2, java.util.concurrent.TimeUnit.SECONDS);
+                    }
+                    nowPlayingMessageId = null;
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to delete NP message on shutdown: {}", e.getMessage());
+            }
         }
 
         cancelIdleTimeout();

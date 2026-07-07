@@ -483,9 +483,13 @@ public class TrackScheduler extends AudioEventAdapter {
                             logger.info("Deferred track resolved but generation changed. Ignoring.");
                             return;
                         }
-                        track.setUserData(deferred.getUserData());
-                        player.startTrack(track, false);
-                        currentTrack = track;
+                        AudioTrack trackToPlay = track;
+                        if ("spotify".equalsIgnoreCase(deferred.getInfo().identifier) || "Spotify".equalsIgnoreCase(deferred.getInfo().author) || (deferred.getInfo().uri != null && deferred.getInfo().uri.contains("spotify.com"))) {
+                            trackToPlay = new SpotifyResolvedTrack(deferred.getInfo(), track, deferred.getArtworkUrl());
+                        }
+                        trackToPlay.setUserData(deferred.getUserData());
+                        player.startTrack(trackToPlay, false);
+                        currentTrack = trackToPlay;
                         musicManager.cancelIdleTimeout();
                         musicManager.notifySessionChanged();
                     }
@@ -494,7 +498,12 @@ public class TrackScheduler extends AudioEventAdapter {
                     public void playlistLoaded(com.sedmelluq.discord.lavaplayer.track.AudioPlaylist playlist) {
                         if (gen != playbackGeneration.get()) return;
                         if (!playlist.getTracks().isEmpty()) {
-                            trackLoaded(playlist.getTracks().get(0));
+                            AudioTrack best = playlist.getTracks().get(0);
+                            if ("spotify".equalsIgnoreCase(deferred.getInfo().identifier) || "Spotify".equalsIgnoreCase(deferred.getInfo().author) || (deferred.getInfo().uri != null && deferred.getInfo().uri.contains("spotify.com"))) {
+                                AudioTrack matched = PlayerManager.matchSpotifyToYoutube(playlist.getTracks(), deferred.getInfo().title, deferred.getInfo().author, deferred.getInfo().length);
+                                if (matched != null) best = matched;
+                            }
+                            trackLoaded(best);
                         } else {
                             noMatches();
                         }
@@ -526,20 +535,20 @@ public class TrackScheduler extends AudioEventAdapter {
         logger.info("[AutoPlay] Reference: \"{}\" by {}", cleanTitle, artist);
 
         String[] searchQueries = {
-                "ytsearch:" + artist + " official audio",
-                "ytsearch:" + artist + " official music video",
-                "ytsearch:" + artist + " top songs",
-                "ytsearch:" + artist + " best songs",
-                "ytsearch:" + artist + " popular songs",
-                "ytsearch:" + artist + " greatest hits songs",
-                "ytsearch:" + artist + " latest songs official",
-                "ytsearch:songs like " + cleanTitle + " " + artist,
-                "ytsearch:similar songs to " + cleanTitle,
-                "ytsearch:" + artist + " full song",
-                "ytsearch:" + artist + " music video",
-                "ytsearch:songs similar to " + artist,
-                "ytsearch:music like " + cleanTitle + " song",
-                "ytsearch:" + artist + " audio"
+                "ytmsearch:" + artist + " official audio",
+                "ytmsearch:" + artist + " official music video",
+                "ytmsearch:" + artist + " top songs",
+                "ytmsearch:" + artist + " best songs",
+                "ytmsearch:" + artist + " popular songs",
+                "ytmsearch:" + artist + " greatest hits songs",
+                "ytmsearch:" + artist + " latest songs official",
+                "ytmsearch:songs like " + cleanTitle + " " + artist,
+                "ytmsearch:similar songs to " + cleanTitle,
+                "ytmsearch:" + artist + " full song",
+                "ytmsearch:" + artist + " music video",
+                "ytmsearch:songs similar to " + artist,
+                "ytmsearch:music like " + cleanTitle + " song",
+                "ytmsearch:" + artist + " audio"
         };
 
         for (String query : searchQueries) {
@@ -588,7 +597,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
         try {
             logger.info("[AutoPlay] Trying final fallback...");
-            List<AudioTrack> fallback = loadTracks("ytsearch:" + artist + " song official audio");
+            List<AudioTrack> fallback = loadTracks("ytmsearch:" + artist + " song official audio");
             if (fallback != null) {
                 AudioTrack valid = fallback.stream()
                         .filter(t -> isValidAutoPlayTrack(t, referenceTrack))
@@ -614,16 +623,16 @@ public class TrackScheduler extends AudioEventAdapter {
         logger.info("[RandomPlay] Reference: \"{}\" by {}", cleanTitle, artist);
 
         String[] searchQueries = {
-                "ytsearch:" + artist + " similar artists genre songs",
-                "ytsearch:songs in the same style language as " + cleanTitle + " " + artist,
-                "ytsearch:best music genre like " + artist,
-                "ytsearch:similar genre playlist to " + cleanTitle,
-                "ytsearch:recommended songs like " + artist + " " + cleanTitle,
-                "ytsearch:" + artist + " radio mix official audio",
-                "ytsearch:popular genre songs like " + cleanTitle,
-                "ytsearch:more songs like " + artist,
-                "ytsearch:music similar to " + cleanTitle + " official audio",
-                "ytsearch:genre language songs like " + artist + " top tracks"
+                "ytmsearch:" + artist + " similar artists genre songs",
+                "ytmsearch:songs in the same style language as " + cleanTitle + " " + artist,
+                "ytmsearch:best music genre like " + artist,
+                "ytmsearch:similar genre playlist to " + cleanTitle,
+                "ytmsearch:recommended songs like " + artist + " " + cleanTitle,
+                "ytmsearch:" + artist + " radio mix official audio",
+                "ytmsearch:popular genre songs like " + cleanTitle,
+                "ytmsearch:more songs like " + artist,
+                "ytmsearch:music similar to " + cleanTitle + " official audio",
+                "ytmsearch:genre language songs like " + artist + " top tracks"
         };
 
         for (String query : searchQueries) {
@@ -666,7 +675,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
         try {
             logger.info("[RandomPlay] Trying final fallback...");
-            List<AudioTrack> fallback = loadTracks("ytsearch:" + artist + " song official audio");
+            List<AudioTrack> fallback = loadTracks("ytmsearch:" + artist + " song official audio");
             if (fallback != null) {
                 List<AudioTrack> validList = fallback.stream()
                         .filter(t -> isValidAutoPlayTrack(t, referenceTrack))
@@ -688,7 +697,7 @@ public class TrackScheduler extends AudioEventAdapter {
         final List<AudioTrack> result = new ArrayList<>();
         CompletableFuture<Void> future = new CompletableFuture<>();
 
-        com.discord.musicbot.audio.PlayerManager.getInstance().loadItemOrdered(musicManager.getGuild(), query,
+        com.discord.musicbot.audio.PlayerManager.getInstance().loadItemWithFallback(musicManager.getGuild(), query,
                 new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
                     @Override
                     public void trackLoaded(AudioTrack track) {
