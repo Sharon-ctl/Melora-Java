@@ -35,7 +35,7 @@ public class SpotifyResolvedTrack extends DelegatedAudioTrack {
 
     @Override
     public long getDuration() {
-        return trackInfo.length;
+        return (trackInfo.length > 0) ? trackInfo.length : delegate.getDuration();
     }
 
     @Override
