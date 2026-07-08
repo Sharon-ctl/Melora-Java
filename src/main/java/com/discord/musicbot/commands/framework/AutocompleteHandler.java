@@ -164,9 +164,9 @@ public class AutocompleteHandler {
             String cleanTitle = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(h.title);
             String cleanAuthor = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(h.author);
             String label = "🕛 " + (cleanTitle.length() > 90 ? cleanTitle.substring(0, 90) + "..." : cleanTitle);
-            String choiceVal = (h.uri != null && (h.uri.contains("spotify.com") || h.uri.contains("youtube.com") || h.uri.contains("youtu.be") || h.uri.startsWith("http") || h.uri.startsWith("ytmsearch:") || h.uri.startsWith("ytsearch:")))
-                    ? cleanTitle + " " + cleanAuthor
-                    : h.uri;
+            String choiceVal = (h.uri != null && (h.uri.startsWith("http://") || h.uri.startsWith("https://")))
+                    ? h.uri
+                    : cleanTitle + " " + cleanAuthor;
             if (choiceVal == null || choiceVal.trim().isEmpty()) choiceVal = cleanTitle;
             if (choiceVal.length() > 100) choiceVal = choiceVal.substring(0, 100);
             choices.add(new Command.Choice(label, choiceVal));
@@ -181,7 +181,9 @@ public class AutocompleteHandler {
                     if (spotifyChoices.size() >= 25) break;
                     String label = "🎵 " + meta.title() + " — " + meta.artist();
                     if (label.length() > 95) label = label.substring(0, 95) + "...";
-                    String val = meta.title() + " " + meta.artist();
+                    String val = (meta.spotifyUrl() != null && (meta.spotifyUrl().contains("spotify.com") || meta.spotifyUrl().startsWith("http")))
+                            ? meta.spotifyUrl()
+                            : "https://open.spotify.com/search/" + java.net.URLEncoder.encode(meta.title() + " " + meta.artist(), java.nio.charset.StandardCharsets.UTF_8);
                     if (val.length() > 100) val = val.substring(0, 100);
                     spotifyChoices.add(new Command.Choice(label, val));
                 }

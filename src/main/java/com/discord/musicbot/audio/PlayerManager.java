@@ -124,6 +124,7 @@ public class PlayerManager {
         com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers.registerRemoteSources(playerManager, deprecatedYoutubeClass);
         com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers.registerLocalSource(playerManager);
 
+        refreshSpotifyTokenAsync();
         logger.info("PlayerManager initialized (Spotify Credentials removed, using URL fetcher fallback)");
     }
 
@@ -256,12 +257,27 @@ public class PlayerManager {
     private volatile String cachedSpotifyToken = null;
     private volatile long spotifyTokenExpiry = 0;
 
+    private void refreshSpotifyTokenAsync() {
+        CompletableFuture.runAsync(() -> {
+            try {
+                String token = getAnonymousSpotifyToken("4cOdK2wGLETKBW3PvgPWqT", "track");
+                if (token != null) {
+                    cachedSpotifyToken = token;
+                    spotifyTokenExpiry = System.currentTimeMillis() + (20 * 60 * 1000L);
+                    logger.info("Successfully refreshed anonymous Spotify token in background.");
+                }
+            } catch (Exception e) {
+                logger.warn("Background Spotify token refresh failed: {}", e.getMessage());
+            }
+        }, ioExecutor);
+    }
+
     private synchronized String getCachedSpotifyToken() {
         if (cachedSpotifyToken == null || System.currentTimeMillis() > spotifyTokenExpiry) {
             String token = getAnonymousSpotifyToken("4cOdK2wGLETKBW3PvgPWqT", "track");
             if (token != null) {
                 cachedSpotifyToken = token;
-                spotifyTokenExpiry = System.currentTimeMillis() + (25 * 60 * 1000L); // 25 minutes
+                spotifyTokenExpiry = System.currentTimeMillis() + (20 * 60 * 1000L);
             }
         }
         return cachedSpotifyToken;
@@ -273,56 +289,66 @@ public class PlayerManager {
             try {
                 java.net.http.HttpClient client = httpClient;
                 String token = getCachedSpotifyToken();
-                if (token != null) {
-                    try {
-                        String apiUrl = "https://api.spotify.com/v1/search?q="
-                                + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8)
-                                + "&type=track&limit=25";
-                        java.net.http.HttpRequest apiReq = java.net.http.HttpRequest.newBuilder()
-                                .uri(java.net.URI.create(apiUrl))
-                                .header("Authorization", "Bearer " + token)
-                                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                                .GET()
-                                .build();
-                        java.net.http.HttpResponse<String> apiResp = client.send(apiReq, java.net.http.HttpResponse.BodyHandlers.ofString());
-                        if (apiResp.statusCode() == 200) {
-                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(apiResp.body());
-                            com.fasterxml.jackson.databind.JsonNode items = root.path("tracks").path("items");
-                            if (items.isArray()) {
-                                String lowerQuery = query.toLowerCase();
-                                boolean wantsCover = lowerQuery.contains("cover") || lowerQuery.contains("tribute") || lowerQuery.contains("karaoke") || lowerQuery.contains("remix") || lowerQuery.contains("instrumental") || lowerQuery.contains("8-bit") || lowerQuery.contains("lullaby") || lowerQuery.contains("kidz bop");
-                                for (com.fasterxml.jackson.databind.JsonNode item : items) {
-                                    String id = item.path("id").asText("");
-                                    String title = item.path("name").asText("");
-                                    StringBuilder artists = new StringBuilder();
-                                    com.fasterxml.jackson.databind.JsonNode arr = item.path("artists");
-                                    if (arr.isArray()) {
-                                        for (int i = 0; i < arr.size(); i++) {
-                                            if (i > 0) artists.append(", ");
-                                            artists.append(arr.get(i).path("name").asText(""));
+                for (int attempt = 0; attempt < 2; attempt++) {
+                    if (token != null) {
+                        try {
+                            String apiUrl = "https://api.spotify.com/v1/search?q="
+                                    + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8)
+                                    + "&type=track&limit=25";
+                            java.net.http.HttpRequest apiReq = java.net.http.HttpRequest.newBuilder()
+                                    .uri(java.net.URI.create(apiUrl))
+                                    .header("Authorization", "Bearer " + token)
+                                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                                    .timeout(java.time.Duration.ofMillis(2000))
+                                    .GET()
+                                    .build();
+                            java.net.http.HttpResponse<String> apiResp = client.send(apiReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+                            if (apiResp.statusCode() == 200) {
+                                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                                com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(apiResp.body());
+                                com.fasterxml.jackson.databind.JsonNode items = root.path("tracks").path("items");
+                                if (items.isArray()) {
+                                    String lowerQuery = query.toLowerCase();
+                                    boolean wantsCover = lowerQuery.contains("cover") || lowerQuery.contains("tribute") || lowerQuery.contains("karaoke") || lowerQuery.contains("remix") || lowerQuery.contains("instrumental") || lowerQuery.contains("8-bit") || lowerQuery.contains("lullaby") || lowerQuery.contains("kidz bop");
+                                    for (com.fasterxml.jackson.databind.JsonNode item : items) {
+                                        String id = item.path("id").asText("");
+                                        String title = item.path("name").asText("");
+                                        StringBuilder artists = new StringBuilder();
+                                        com.fasterxml.jackson.databind.JsonNode arr = item.path("artists");
+                                        if (arr.isArray()) {
+                                            for (int i = 0; i < arr.size(); i++) {
+                                                if (i > 0) artists.append(", ");
+                                                artists.append(arr.get(i).path("name").asText(""));
+                                            }
+                                        }
+                                        String combinedLower = (title + " " + artists).toLowerCase();
+                                        if (!wantsCover && (combinedLower.contains("cover") || combinedLower.contains("tribute") || combinedLower.contains("karaoke") || combinedLower.contains("kidz bop") || combinedLower.contains("8-bit") || combinedLower.contains("lullaby") || combinedLower.contains("instrumental"))) {
+                                            continue;
+                                        }
+                                        long duration = item.path("duration_ms").asLong(0);
+                                        String artwork = null;
+                                        com.fasterxml.jackson.databind.JsonNode imgs = item.path("album").path("images");
+                                        if (imgs.isArray() && imgs.size() > 0) {
+                                            artwork = imgs.get(0).path("url").asText(null);
+                                        }
+                                        String spotifyUrl = !id.isEmpty() ? "https://open.spotify.com/track/" + id : null;
+                                        if (!title.isEmpty() && duration > 0) {
+                                            results.add(new SpotifyMetadata("ytsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(title), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
                                         }
                                     }
-                                    String combinedLower = (title + " " + artists).toLowerCase();
-                                    if (!wantsCover && (combinedLower.contains("cover") || combinedLower.contains("tribute") || combinedLower.contains("karaoke") || combinedLower.contains("kidz bop") || combinedLower.contains("8-bit") || combinedLower.contains("lullaby") || combinedLower.contains("instrumental"))) {
-                                        continue;
-                                    }
-                                    long duration = item.path("duration_ms").asLong(0);
-                                    String artwork = null;
-                                    com.fasterxml.jackson.databind.JsonNode imgs = item.path("album").path("images");
-                                    if (imgs.isArray() && imgs.size() > 0) {
-                                        artwork = imgs.get(0).path("url").asText(null);
-                                    }
-                                    String spotifyUrl = !id.isEmpty() ? "https://open.spotify.com/track/" + id : null;
-                                    if (!title.isEmpty() && duration > 0) {
-                                        results.add(new SpotifyMetadata("ytsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(title), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
-                                    }
+                                }
+                                break;
+                            } else if (apiResp.statusCode() == 401 || apiResp.statusCode() == 429) {
+                                cachedSpotifyToken = null;
+                                spotifyTokenExpiry = 0;
+                                if (attempt == 0) {
+                                    token = getCachedSpotifyToken();
+                                    continue;
                                 }
                             }
-                        } else if (apiResp.statusCode() == 401 || apiResp.statusCode() == 429) {
-                            cachedSpotifyToken = null;
-                        }
-                    } catch (Exception ignored) {}
+                        } catch (Exception ignored) {}
+                    }
+                    break;
                 }
 
                 if (results.isEmpty()) {
@@ -332,6 +358,7 @@ public class PlayerManager {
                     java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                             .uri(java.net.URI.create(url))
                             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                            .timeout(java.time.Duration.ofMillis(2000))
                             .GET()
                             .build();
                     java.net.http.HttpResponse<String> response = client.send(request,
@@ -357,7 +384,10 @@ public class PlayerManager {
                                 artwork = artwork.replace("100x100bb.jpg", "600x600bb.jpg");
                             }
                             if (!title.isEmpty() && duration > 0 && results.size() < 25) {
-                                results.add(new SpotifyMetadata("ytsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artist), cleanTrackTitle(title), cleanTrackTitle(artist), artwork, duration, null));
+                                String cleanTitle = cleanTrackTitle(title);
+                                String cleanArtist = cleanTrackTitle(artist);
+                                String fallbackSpotifyUrl = "https://open.spotify.com/search/" + java.net.URLEncoder.encode(cleanTitle + " " + cleanArtist, java.nio.charset.StandardCharsets.UTF_8);
+                                results.add(new SpotifyMetadata("ytsearch:" + cleanTitle + " " + cleanArtist, cleanTitle, cleanArtist, artwork, duration, fallbackSpotifyUrl));
                             }
                         }
                     }
@@ -435,8 +465,10 @@ public class PlayerManager {
     }
 
     public void loadSpotifyTrackWithFallback(MusicManager musicManager, SpotifyMetadata meta, com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler handler) {
-        String query = meta.query() != null ? meta.query().replace("ytmsearch:", "ytsearch:") : "ytsearch:" + meta.title() + " " + meta.artist();
-        String uri = (meta.spotifyUrl() != null && meta.spotifyUrl().contains("/track/")) ? meta.spotifyUrl() : "ytsearch:" + meta.title() + " " + (meta.artist() != null ? meta.artist() : "");
+        String query = meta.query() != null ? meta.query().replace("ytmsearch:", "ytsearch:") : "ytsearch:" + cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : "");
+        String uri = (meta.spotifyUrl() != null && (meta.spotifyUrl().contains("spotify.com") || meta.spotifyUrl().startsWith("http")))
+                ? meta.spotifyUrl()
+                : "https://open.spotify.com/search/" + java.net.URLEncoder.encode(cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : ""), java.nio.charset.StandardCharsets.UTF_8);
         com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo spotifyInfo = new com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo(
                 cleanTrackTitle(meta.title()), cleanTrackTitle(meta.artist() != null ? meta.artist() : "Spotify"), meta.duration(), "spotify", false, uri);
 
