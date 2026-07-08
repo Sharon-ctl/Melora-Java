@@ -410,6 +410,32 @@ public class PlayerManager {
         return cleaned.isEmpty() ? title.trim() : cleaned;
     }
 
+    public static String extractSpotifySearchQuery(String url) {
+        try {
+            if (url.contains("/search/")) {
+                String encoded = url.substring(url.indexOf("/search/") + 8);
+                if (encoded.contains("?")) {
+                    encoded = encoded.substring(0, encoded.indexOf("?"));
+                }
+                return java.net.URLDecoder.decode(encoded, java.nio.charset.StandardCharsets.UTF_8).trim();
+            } else if (url.contains("/search")) {
+                java.net.URI uri = java.net.URI.create(url);
+                String query = uri.getQuery();
+                if (query != null) {
+                    for (String param : query.split("&")) {
+                        String[] pair = param.split("=");
+                        if (pair.length > 1 && (pair[0].equals("q") || pair[0].equals("query"))) {
+                            return java.net.URLDecoder.decode(pair[1], java.nio.charset.StandardCharsets.UTF_8).trim();
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return null;
+    }
+
     public static com.sedmelluq.discord.lavaplayer.track.AudioTrack matchSpotifyToYoutube(
             List<com.sedmelluq.discord.lavaplayer.track.AudioTrack> candidates, String targetTitle, String targetArtist, long targetDurationMs) {
         if (candidates == null || candidates.isEmpty()) return null;
@@ -925,7 +951,14 @@ public class PlayerManager {
         }
     }
 
-    public void loadItemOrdered(Guild guild, String trackUrl, AudioLoadResultHandler handler) {
+    public void loadItemOrdered(Guild guild, String rawTrackUrl, AudioLoadResultHandler handler) {
+        final String trackUrl;
+        if (rawTrackUrl != null && rawTrackUrl.contains("spotify.com") && rawTrackUrl.contains("/search")) {
+            String q = extractSpotifySearchQuery(rawTrackUrl);
+            trackUrl = (q != null && !q.isEmpty()) ? q : rawTrackUrl;
+        } else {
+            trackUrl = rawTrackUrl;
+        }
         MusicManager musicManager = getMusicManager(guild);
         
         if (trackUrl.contains("spotify.com") && (trackUrl.contains("/track/") || trackUrl.contains("/playlist/") || trackUrl.contains("/album/") || trackUrl.contains("/episode/"))) {
@@ -1004,8 +1037,15 @@ public class PlayerManager {
         loadAndPlay(event, trackUrl, null);
     }
 
-    public void loadAndPlay(net.dv8tion.jda.api.interactions.callbacks.IReplyCallback event, String trackUrl,
+    public void loadAndPlay(net.dv8tion.jda.api.interactions.callbacks.IReplyCallback event, String rawTrackUrl,
             String forcedArtworkUrl) {
+        final String trackUrl;
+        if (rawTrackUrl != null && rawTrackUrl.contains("spotify.com") && rawTrackUrl.contains("/search")) {
+            String q = extractSpotifySearchQuery(rawTrackUrl);
+            trackUrl = (q != null && !q.isEmpty()) ? q : rawTrackUrl;
+        } else {
+            trackUrl = rawTrackUrl;
+        }
         MusicManager musicManager = getMusicManager(event.getGuild());
 
         if (trackUrl.contains("spotify.com")) {
@@ -1172,7 +1212,14 @@ public class PlayerManager {
         loadAndPlayInstant(event, trackUrl, null);
     }
 
-    public void loadAndPlayInstant(SlashCommandInteractionEvent event, String trackUrl, String forcedArtworkUrl) {
+    public void loadAndPlayInstant(SlashCommandInteractionEvent event, String rawTrackUrl, String forcedArtworkUrl) {
+        final String trackUrl;
+        if (rawTrackUrl != null && rawTrackUrl.contains("spotify.com") && rawTrackUrl.contains("/search")) {
+            String q = extractSpotifySearchQuery(rawTrackUrl);
+            trackUrl = (q != null && !q.isEmpty()) ? q : rawTrackUrl;
+        } else {
+            trackUrl = rawTrackUrl;
+        }
         MusicManager musicManager = getMusicManager(event.getGuild());
 
         if (trackUrl.contains("spotify.com") && (trackUrl.contains("/track/") || trackUrl.contains("/playlist/") || trackUrl.contains("/album/") || trackUrl.contains("/episode/"))) {
@@ -1311,7 +1358,14 @@ public class PlayerManager {
         });
     }
 
-    public void loadAndInsert(SlashCommandInteractionEvent event, String trackUrl, int position) {
+    public void loadAndInsert(SlashCommandInteractionEvent event, String rawTrackUrl, int position) {
+        final String trackUrl;
+        if (rawTrackUrl != null && rawTrackUrl.contains("spotify.com") && rawTrackUrl.contains("/search")) {
+            String q = extractSpotifySearchQuery(rawTrackUrl);
+            trackUrl = (q != null && !q.isEmpty()) ? q : rawTrackUrl;
+        } else {
+            trackUrl = rawTrackUrl;
+        }
         MusicManager musicManager = getMusicManager(event.getGuild());
 
         if (trackUrl.contains("spotify.com") && (trackUrl.contains("/track/") || trackUrl.contains("/playlist/") || trackUrl.contains("/album/") || trackUrl.contains("/episode/"))) {
