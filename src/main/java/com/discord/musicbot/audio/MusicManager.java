@@ -107,6 +107,39 @@ public class MusicManager {
         lastKaraokeLine = null;
         fetchingLyrics = false;
     }
+    public List<KaraokeManager.LrcLine> getKaraokeLines() { return karaokeLines; }
+    public boolean isFetchingLyrics() { return fetchingLyrics; }
+
+    public void ensureLyricsFetched(AudioTrack current) {
+        if (current == null || karaokeLines != null || fetchingLyrics) {
+            return;
+        }
+        fetchingLyrics = true;
+        lastKaraokeLine = "Searching for synced lyrics...";
+        sendNowPlayingMessage(false);
+        // Try to fetch synced lyrics once per track
+        String query = current.getInfo().author + " " + current.getInfo().title;
+        query = query.replaceAll("(?i)\\b(official|music video|audio|lyric video|lyrics)\\b", "").replaceAll("[\\(\\[].*?[\\)\\]]", "").trim();
+        final String finalQuery = query;
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                String syncedLrc = LyricsManager.fetchSyncedLyrics(finalQuery).get(3, TimeUnit.SECONDS);
+                if (syncedLrc != null) {
+                    karaokeLines = KaraokeManager.parseLrc(syncedLrc);
+                } else {
+                    karaokeLines = new ArrayList<>(); // Empty list marks as attempted
+                }
+            } catch (Exception e) {
+                karaokeLines = new ArrayList<>();
+            } finally {
+                fetchingLyrics = false;
+                if (karaokeLines != null && karaokeLines.isEmpty()) {
+                    lastKaraokeLine = "No synced lyrics available.";
+                    sendNowPlayingMessage(false);
+                }
+            }
+        }, PlayerManager.ioExecutor);
+    }
 
     public void enableInstantKaraoke() {
         this.karaokeMode = true;
@@ -221,33 +254,7 @@ public class MusicManager {
                 AudioTrack current = player.getPlayingTrack();
                 if (current == null) return;
 
-                if (karaokeLines == null && !fetchingLyrics) {
-                    fetchingLyrics = true;
-                    lastKaraokeLine = "Searching for synced lyrics...";
-                    sendNowPlayingMessage(false);
-                    // Try to fetch synced lyrics once per track
-                    String query = current.getInfo().author + " " + current.getInfo().title;
-                    query = query.replaceAll("(?i)\\b(official|music video|audio|lyric video|lyrics)\\b", "").replaceAll("[\\(\\[].*?[\\)\\]]", "").trim();
-                    final String finalQuery = query;
-                    java.util.concurrent.CompletableFuture.runAsync(() -> {
-                        try {
-                            String syncedLrc = LyricsManager.fetchSyncedLyrics(finalQuery).get(3, TimeUnit.SECONDS);
-                            if (syncedLrc != null) {
-                                karaokeLines = KaraokeManager.parseLrc(syncedLrc);
-                            } else {
-                                karaokeLines = new ArrayList<>(); // Empty list marks as attempted
-                            }
-                        } catch (Exception e) {
-                            karaokeLines = new ArrayList<>();
-                        } finally {
-                            fetchingLyrics = false;
-                            if (karaokeLines != null && karaokeLines.isEmpty()) {
-                                lastKaraokeLine = "No synced lyrics available.";
-                                sendNowPlayingMessage(false);
-                            }
-                        }
-                    }, PlayerManager.ioExecutor);
-                }
+                ensureLyricsFetched(current);
 
                 if (karaokeLines != null && !karaokeLines.isEmpty()) {
                     long pos = current.getPosition();
