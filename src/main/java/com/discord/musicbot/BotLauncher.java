@@ -14,6 +14,7 @@ public class BotLauncher {
 
         private static final Logger logger = LoggerFactory.getLogger(BotLauncher.class);
         private static java.util.concurrent.ScheduledExecutorService activityExecutor;
+        private static NowPlayingApiServer nowPlayingApiServer;
 
         public static void main(String[] args) {
                 try {
@@ -109,6 +110,14 @@ public class BotLauncher {
                                 com.discord.musicbot.data.SavedQueueManager.getInstance().shutdown();
                                 com.discord.musicbot.data.UserExcludeManager.getInstance().shutdown();
                                 com.discord.musicbot.data.DatabaseManager.getInstance().shutdown();
+                                if (nowPlayingApiServer != null) {
+                                        try {
+                                                nowPlayingApiServer.stop();
+                                                logger.info("NowPlaying API server stopped.");
+                                        } catch (Exception e) {
+                                                logger.error("Failed to stop NowPlaying API server", e);
+                                        }
+                                }
                                 if (activityExecutor != null) {
                                         activityExecutor.shutdownNow();
                                 }
@@ -123,6 +132,24 @@ public class BotLauncher {
                         }));
 
                         jda.awaitReady();
+
+                        // Start NowPlaying API Server
+                        int port = 9091;
+                        String portStr = dotenv.get("NOWPLAYING_API_PORT");
+                        if (portStr != null && !portStr.trim().isEmpty()) {
+                                try {
+                                        port = Integer.parseInt(portStr.trim());
+                                } catch (NumberFormatException e) {
+                                        logger.warn("Invalid NOWPLAYING_API_PORT specified: '{}', defaulting to 9091", portStr);
+                                }
+                        }
+                        try {
+                                nowPlayingApiServer = new NowPlayingApiServer(port);
+                                nowPlayingApiServer.start();
+                                logger.info("NowPlaying API server started on 127.0.0.1:{}", port);
+                        } catch (Exception e) {
+                                logger.error("Failed to start NowPlaying API server on port " + port, e);
+                        }
 
                         // Restore previous sessions
                         com.discord.musicbot.data.SessionManager.getInstance().restoreAll(jda);
