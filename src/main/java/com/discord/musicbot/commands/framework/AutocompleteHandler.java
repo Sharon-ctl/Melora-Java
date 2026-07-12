@@ -181,7 +181,7 @@ public class AutocompleteHandler {
                     if (ytChoices.size() >= 25) break;
                     String title = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(track.getInfo().title);
                     String author = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(track.getInfo().author);
-                    String label = "🎵 " + title + " — " + author;
+                    String label = "🔎 " + title + " — " + author;
                     if (label.length() > 95) label = label.substring(0, 95) + "...";
                     String val = track.getInfo().uri;
                     if (val == null || val.trim().isEmpty() || !val.startsWith("http")) {

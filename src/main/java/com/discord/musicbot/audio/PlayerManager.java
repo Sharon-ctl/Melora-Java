@@ -675,6 +675,20 @@ public class PlayerManager {
      */
     private String getAnonymousSpotifyToken(String spotifyId, String embedType) {
         try {
+            java.net.http.HttpRequest req1 = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("https://open.spotify.com/get_access_token?reason=transport&productType=embed"))
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+                    .GET()
+                    .build();
+            java.net.http.HttpResponse<String> resp1 = httpClient.send(req1, java.net.http.HttpResponse.BodyHandlers.ofString());
+            java.util.regex.Matcher m1 = java.util.regex.Pattern.compile("\"accessToken\":\"([^\"]+)\"").matcher(resp1.body());
+            if (m1.find()) {
+                logger.debug("Spotify: Got anonymous token from get_access_token endpoint");
+                return m1.group(1);
+            }
+        } catch (Exception ignored) {}
+
+        try {
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                     .uri(java.net.URI.create("https://open.spotify.com/embed/" + embedType + "/" + spotifyId))
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
@@ -852,14 +866,16 @@ public class PlayerManager {
                 }
 
                 // If there are more tracks than what the scraper got, try anonymous Spotify token
-                if (totalCount > tracks.size()) {
+                if (totalCount > tracks.size() && tracks.size() < 100) {
                     String id = url.split("\\?")[0].replaceAll(".*/(playlist|album)/", "");
                     String token = getCachedSpotifyToken();
+                    int tokenRetries = 0;
                     if (token != null) {
                         try {
                             int offset = tracks.size();
+                            int targetCount = Math.min(totalCount, 100);
                             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                            while (offset < totalCount) {
+                            while (offset < targetCount) {
                                 String apiUrl = isAlbum
                                         ? "https://api.spotify.com/v1/albums/" + id + "/tracks?limit=50&offset=" + offset
                                         : "https://api.spotify.com/v1/playlists/" + id + "/tracks?limit=100&offset=" + offset;
@@ -871,6 +887,14 @@ public class PlayerManager {
                                 java.net.http.HttpResponse<String> apiResp = client
                                         .send(apiReq, java.net.http.HttpResponse.BodyHandlers.ofString());
                                 
+                                if (apiResp.statusCode() == 401 && tokenRetries < 2) {
+                                    tokenRetries++;
+                                    cachedSpotifyToken = null;
+                                    spotifyTokenExpiry = 0;
+                                    token = getCachedSpotifyToken();
+                                    if (token != null) continue;
+                                }
+
                                 if (apiResp.statusCode() != 200) {
                                     logger.warn("Spotify API returned {} during progressive load, stopping pagination", apiResp.statusCode());
                                     break;
@@ -934,6 +958,10 @@ public class PlayerManager {
                         logger.warn("Spotify: '{}' has {} tracks but only {} loaded (could not get anonymous token).",
                                 playlistName, totalCount, tracks.size());
                     }
+                }
+
+                if (tracks.size() > 100) {
+                    tracks = new ArrayList<>(tracks.subList(0, 100));
                 }
 
                 logger.info("Spotify: Final result: {} tracks from '{}'", tracks.size(), playlistName);
@@ -1093,7 +1121,11 @@ public class PlayerManager {
                                 + " is empty or could not be loaded.").queue();
                         return;
                     }
-                    for (SpotifyMetadata meta : result.tracks()) {
+                    List<SpotifyMetadata> metas = result.tracks();
+                    if (metas.size() > 100) {
+                        metas = metas.subList(0, 100);
+                    }
+                    for (SpotifyMetadata meta : metas) {
                         com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo info = new com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo(
                                 meta.title(), meta.artist() != null ? meta.artist() : "Spotify", meta.duration(), "spotify", false, meta.spotifyUrl() != null ? meta.spotifyUrl() : meta.query());
                         DeferredTrack track = new DeferredTrack(info, meta.query(), meta.artworkUrl());
@@ -1101,7 +1133,7 @@ public class PlayerManager {
                         musicManager.getScheduler().queue(track);
                     }
                     musicManager.updateNowPlayingMessage();
-                    sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Queued **" + result.tracks().size()
+                    sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Queued **" + metas.size()
                             + " tracks** from `" + escapeMarkdown(result.name()) + "`").queue();
                 });
             } else {
@@ -1219,7 +1251,51 @@ public class PlayerManager {
 
         if (trackUrl.contains("spotify.com") && (trackUrl.contains("/track/") || trackUrl.contains("/playlist/") || trackUrl.contains("/album/") || trackUrl.contains("/episode/"))) {
             if (trackUrl.contains("/playlist/") || trackUrl.contains("/album/")) {
-                loadAndPlay(event, trackUrl);
+                String type = trackUrl.contains("/album/") ? "Album" : "Playlist";
+                String userId = event.getUser().getId();
+                fetchSpotifyPlaylist(trackUrl).thenAccept(result -> {
+                    if (result == null || result.tracks().isEmpty()) {
+                        sendHookMessage(event, EmbedHelper.MSG_ERROR + " Spotify " + type.toLowerCase()
+                                + " is empty or could not be loaded.").queue();
+                        return;
+                    }
+                    final List<SpotifyMetadata> metas = result.tracks().size() > 100
+                            ? result.tracks().subList(0, 100)
+                            : result.tracks();
+                    SpotifyMetadata firstMeta = metas.get(0);
+                    loadSpotifyTrackWithFallback(musicManager, firstMeta, new AudioLoadResultHandler() {
+                        @Override
+                        public void trackLoaded(AudioTrack track) {
+                            track.setUserData("{\"requester\":\"" + userId + "\"}");
+                            musicManager.getScheduler().playInstant(track);
+                            for (int i = 1; i < metas.size(); i++) {
+                                SpotifyMetadata m = metas.get(i);
+                                com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo info = new com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo(
+                                        m.title(), m.artist() != null ? m.artist() : "Spotify", m.duration(), "spotify", false, m.spotifyUrl() != null ? m.spotifyUrl() : m.query());
+                                DeferredTrack dt = new DeferredTrack(info, m.query(), m.artworkUrl());
+                                dt.setUserData("{\"requester\":\"" + userId + "\"}");
+                                musicManager.getScheduler().getQueueRaw().offer(dt);
+                            }
+                            sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Instant Playing **" + escapeMarkdown(track.getInfo().title) + "**" + (metas.size() > 1 ? " • Queued `" + (metas.size() - 1) + "` tracks" : "")).queue();
+                        }
+                        @Override
+                        public void playlistLoaded(AudioPlaylist playlist) {
+                            if (!playlist.getTracks().isEmpty()) {
+                                trackLoaded(playlist.getTracks().get(0));
+                            } else {
+                                noMatches();
+                            }
+                        }
+                        @Override
+                        public void noMatches() {
+                            sendHookMessage(event, "No results found.").queue();
+                        }
+                        @Override
+                        public void loadFailed(FriendlyException exception) {
+                            sendHookMessage(event, "Error: " + exception.getMessage()).queue();
+                        }
+                    });
+                });
                 return;
             }
             fetchSpotifyMetadata(trackUrl).thenAccept(meta -> {
@@ -1331,7 +1407,30 @@ public class PlayerManager {
 
         if (trackUrl.contains("spotify.com") && (trackUrl.contains("/track/") || trackUrl.contains("/playlist/") || trackUrl.contains("/album/") || trackUrl.contains("/episode/"))) {
             if (trackUrl.contains("/playlist/") || trackUrl.contains("/album/")) {
-                loadAndPlay(event, trackUrl);
+                String type = trackUrl.contains("/album/") ? "Album" : "Playlist";
+                String userId = event.getUser().getId();
+                fetchSpotifyPlaylist(trackUrl).thenAccept(result -> {
+                    if (result == null || result.tracks().isEmpty()) {
+                        sendHookMessage(event, EmbedHelper.MSG_ERROR + " Spotify " + type.toLowerCase()
+                                + " is empty or could not be loaded.").queue();
+                        return;
+                    }
+                    List<SpotifyMetadata> metas = result.tracks();
+                    if (metas.size() > 100) {
+                        metas = metas.subList(0, 100);
+                    }
+                    int currentPos = position;
+                    for (SpotifyMetadata meta : metas) {
+                        com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo info = new com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo(
+                                meta.title(), meta.artist() != null ? meta.artist() : "Spotify", meta.duration(), "spotify", false, meta.spotifyUrl() != null ? meta.spotifyUrl() : meta.query());
+                        DeferredTrack track = new DeferredTrack(info, meta.query(), meta.artworkUrl());
+                        track.setUserData("{\"requester\":\"" + userId + "\"}");
+                        musicManager.getScheduler().insert(track, currentPos++);
+                    }
+                    musicManager.updateNowPlayingMessage();
+                    sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Inserted **" + metas.size()
+                            + " tracks** from `" + escapeMarkdown(result.name()) + "` • Starting at Position: `" + (position + 1) + "`").queue();
+                });
                 return;
             }
             fetchSpotifyMetadata(trackUrl).thenAccept(meta -> {
