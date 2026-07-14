@@ -51,10 +51,10 @@ public class MusicManager {
     // Stall Watchdog
     private ScheduledFuture<?> watchdogTask;
     private int stallCount = 0;
-    
+
     private volatile boolean isDeliberateDisconnect = false;
     private volatile String activeVoiceChannelId = null;
-    
+
     public void markDeliberateDisconnect() {
         this.isDeliberateDisconnect = true;
     }
@@ -78,113 +78,203 @@ public class MusicManager {
     public void grantTempDj(String userId) {
         tempDjs.add(userId);
     }
-    
+
     public void revokeTempDj(String userId) {
         tempDjs.remove(userId);
     }
-    
+
     public boolean isTempDj(String userId) {
         return tempDjs.contains(userId);
     }
 
-    // Karaoke Mode
+    // Karaoke Mode & Live Lyrics Container
     private boolean karaokeMode = false;
     private ScheduledFuture<?> karaokeTask;
     private volatile List<KaraokeManager.LrcLine> karaokeLines = null;
-    private volatile String lastKaraokeLine = null;
     private volatile boolean fetchingLyrics = false;
-    
-    public boolean isKaraokeMode() { return karaokeMode; }
-    public void setKaraokeMode(boolean karaokeMode) { 
-        this.karaokeMode = karaokeMode; 
+    private volatile long liveLyricsMessageId = -1;
+    private volatile long liveLyricsChannelId = -1;
+    private volatile int lastActiveLineIndex = -2;
+
+    public boolean isKaraokeMode() {
+        return karaokeMode;
+    }
+
+    public void setKaraokeMode(boolean karaokeMode) {
+        this.karaokeMode = karaokeMode;
         if (!karaokeMode) {
+            cleanupLiveLyricsContainer();
             resetKaraokeTrack();
+        } else {
+            AudioTrack current = player.getPlayingTrack();
+            if (current != null) {
+                ensureLyricsFetchedAndDisplay(current, null);
+            }
         }
         sendNowPlayingMessage(false);
     }
+
     public void resetKaraokeTrack() {
+        cleanupLiveLyricsContainer();
         karaokeLines = null;
-        lastKaraokeLine = null;
         fetchingLyrics = false;
+        lastActiveLineIndex = -2;
     }
-    public List<KaraokeManager.LrcLine> getKaraokeLines() { return karaokeLines; }
-    public boolean isFetchingLyrics() { return fetchingLyrics; }
+
+    public List<KaraokeManager.LrcLine> getKaraokeLines() {
+        return karaokeLines;
+    }
+
+    public boolean isFetchingLyrics() {
+        return fetchingLyrics;
+    }
+
+    public synchronized void cleanupLiveLyricsContainer() {
+        if (liveLyricsMessageId != -1 && liveLyricsChannelId != -1) {
+            long msgId = liveLyricsMessageId;
+            long chId = liveLyricsChannelId;
+            liveLyricsMessageId = -1;
+            lastActiveLineIndex = -2;
+            net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel = guild.getJDA()
+                    .getTextChannelById(chId);
+            if (channel == null) {
+                channel = getAnnouncementChannel();
+            }
+            if (channel != null) {
+                channel.deleteMessageById(msgId).queue(null, e -> {
+                });
+            }
+        } else {
+            liveLyricsMessageId = -1;
+            lastActiveLineIndex = -2;
+        }
+    }
 
     public void ensureLyricsFetched(AudioTrack current) {
-        if (current == null || karaokeLines != null || fetchingLyrics) {
+        ensureLyricsFetchedAndDisplay(current, null);
+    }
+
+    public void ensureLyricsFetchedAndDisplay(AudioTrack current,
+            net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel) {
+        if (current == null || fetchingLyrics) {
+            return;
+        }
+        if (channel != null) {
+            this.liveLyricsChannelId = channel.getIdLong();
+        } else if (this.liveLyricsChannelId == -1) {
+            net.dv8tion.jda.api.entities.channel.middleman.MessageChannel ch = getAnnouncementChannel();
+            if (ch != null) {
+                this.liveLyricsChannelId = ch.getIdLong();
+            }
+        }
+        if (this.karaokeLines != null && !this.karaokeLines.isEmpty()) {
+            sendOrUpdateLiveLyricsContainer(current, this.karaokeLines, null);
             return;
         }
         fetchingLyrics = true;
-        lastKaraokeLine = "Searching for synced lyrics...";
-        sendNowPlayingMessage(false);
-        // Try to fetch synced lyrics once per track
+        sendOrUpdateLiveLyricsContainer(current, null, com.discord.musicbot.config.EmojiConfig.getInstance().music + " Searching for live synced lyrics...");
+
         String query = current.getInfo().author + " " + current.getInfo().title;
-        query = query.replaceAll("(?i)\\b(official|music video|audio|lyric video|lyrics)\\b", "").replaceAll("[\\(\\[].*?[\\)\\]]", "").trim();
+        query = query.replaceAll("(?i)\\b(official|music video|audio|lyric video|lyrics)\\b", "")
+                .replaceAll("[\\(\\[].*?[\\)\\]]", "").trim();
         final String finalQuery = query;
+
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
-                String syncedLrc = LyricsManager.fetchSyncedLyrics(finalQuery).get(3, TimeUnit.SECONDS);
+                String syncedLrc = LyricsManager.fetchSyncedLyrics(finalQuery).get(4, TimeUnit.SECONDS);
                 if (syncedLrc != null) {
                     karaokeLines = KaraokeManager.parseLrc(syncedLrc);
+                    long pos = current.getPosition();
+                    lastActiveLineIndex = KaraokeManager.getActiveLineIndex(karaokeLines, pos);
+                    sendOrUpdateLiveLyricsContainer(current, karaokeLines, null);
                 } else {
-                    karaokeLines = new ArrayList<>(); // Empty list marks as attempted
+                    // Try normal fetchLyrics fallback
+                    var lyricsResult = LyricsManager.fetchLyrics(finalQuery).get(4, TimeUnit.SECONDS);
+                    if (lyricsResult != null && lyricsResult.isLive && lyricsResult.text != null
+                            && !lyricsResult.text.isBlank()) {
+                        karaokeLines = KaraokeManager.parseLrc(lyricsResult.text);
+                        long pos = current.getPosition();
+                        lastActiveLineIndex = KaraokeManager.getActiveLineIndex(karaokeLines, pos);
+                        sendOrUpdateLiveLyricsContainer(current, karaokeLines, null);
+                    } else {
+                        karaokeLines = new ArrayList<>();
+                        sendOrUpdateLiveLyricsContainer(current, null,
+                                com.discord.musicbot.config.EmojiConfig.getInstance().error + " No live synced lyrics found for **" + escapeMarkdownHelper(finalQuery) + "**.");
+                    }
                 }
             } catch (Exception e) {
                 karaokeLines = new ArrayList<>();
+                sendOrUpdateLiveLyricsContainer(current, null,
+                        com.discord.musicbot.config.EmojiConfig.getInstance().error + " No live synced lyrics found for **" + escapeMarkdownHelper(finalQuery) + "**.");
             } finally {
                 fetchingLyrics = false;
-                if (karaokeLines != null && karaokeLines.isEmpty()) {
-                    lastKaraokeLine = "No synced lyrics available.";
-                    sendNowPlayingMessage(false);
-                }
             }
         }, PlayerManager.ioExecutor);
     }
 
-    public void enableInstantKaraoke() {
-        this.karaokeMode = true;
-        AudioTrack current = player.getPlayingTrack();
-        if (current == null) return;
+    private String escapeMarkdownHelper(String s) {
+        return s == null ? "" : s.replaceAll("([*_`~>|])", "\\\\$1");
+    }
 
-        if (this.karaokeLines == null && !this.fetchingLyrics) {
-            this.fetchingLyrics = true;
-            this.lastKaraokeLine = "Searching for instant live lyrics...";
-            sendNowPlayingMessage(false);
-
-            String query = current.getInfo().author + " " + current.getInfo().title;
-            query = query.replaceAll("(?i)\\b(official|music video|audio|lyric video|lyrics)\\b", "").replaceAll("[\\(\\[].*?[\\)\\]]", "").trim();
-            final String finalQuery = query;
-            java.util.concurrent.CompletableFuture.runAsync(() -> {
-                try {
-                    String syncedLrc = LyricsManager.fetchSyncedLyrics(finalQuery).get(3, java.util.concurrent.TimeUnit.SECONDS);
-                    if (syncedLrc != null) {
-                        this.karaokeLines = KaraokeManager.parseLrc(syncedLrc);
-                        long pos = current.getPosition();
-                        String activeLine = KaraokeManager.getActiveLine(this.karaokeLines, pos);
-                        if (activeLine != null) {
-                            this.lastKaraokeLine = activeLine;
-                        }
-                    } else {
-                        this.karaokeLines = new java.util.ArrayList<>();
-                    }
-                } catch (Exception e) {
-                    this.karaokeLines = new java.util.ArrayList<>();
-                } finally {
-                    this.fetchingLyrics = false;
-                    if (this.karaokeLines != null && this.karaokeLines.isEmpty()) {
-                        this.lastKaraokeLine = "No synced lyrics available.";
-                    }
-                    sendNowPlayingMessage(false);
-                }
-            }, PlayerManager.ioExecutor);
-        } else if (this.karaokeLines != null && !this.karaokeLines.isEmpty()) {
-            long pos = current.getPosition();
-            String activeLine = KaraokeManager.getActiveLine(this.karaokeLines, pos);
-            if (activeLine != null) {
-                this.lastKaraokeLine = activeLine;
-            }
-            sendNowPlayingMessage(false);
+    public synchronized void sendOrUpdateLiveLyricsContainer(AudioTrack current, List<KaraokeManager.LrcLine> lines,
+            String statusMessage) {
+        if (!karaokeMode)
+            return;
+        net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel = null;
+        if (liveLyricsChannelId != -1) {
+            channel = guild.getJDA().getTextChannelById(liveLyricsChannelId);
         }
+        if (channel == null) {
+            channel = getAnnouncementChannel();
+            if (channel != null) {
+                liveLyricsChannelId = channel.getIdLong();
+            }
+        }
+        if (channel == null || current == null)
+            return;
+
+        long pos = current.getPosition();
+        int activeIdx = (lines != null && !lines.isEmpty()) ? KaraokeManager.getActiveLineIndex(lines, pos) : -1;
+        this.lastActiveLineIndex = activeIdx;
+
+        var container = com.discord.musicbot.commands.framework.EmbedHelper.createLiveLyricsContainer(
+                current.getInfo().title, current.getInfo().author, lines, activeIdx, statusMessage);
+
+        final net.dv8tion.jda.api.entities.channel.middleman.MessageChannel finalCh = channel;
+        if (liveLyricsMessageId != -1) {
+            final long msgId = liveLyricsMessageId;
+            finalCh.editMessageComponentsById(msgId, container)
+                    .useComponentsV2()
+                    .queue(null, e -> {
+                        if (e instanceof net.dv8tion.jda.api.exceptions.ErrorResponseException ere && ere
+                                .getErrorResponse() == net.dv8tion.jda.api.requests.ErrorResponse.UNKNOWN_MESSAGE) {
+                            liveLyricsMessageId = -1;
+                            finalCh.sendMessageComponents(container).useComponentsV2()
+                                    .queue(msg -> liveLyricsMessageId = msg.getIdLong(), err -> {
+                                    });
+                        }
+                    });
+        } else {
+            finalCh.sendMessageComponents(container).useComponentsV2()
+                    .queue(msg -> liveLyricsMessageId = msg.getIdLong(), err -> {
+                    });
+        }
+    }
+
+    public void enableInstantKaraoke() {
+        enableInstantKaraoke(null);
+    }
+
+    public void enableInstantKaraoke(net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel) {
+        this.karaokeMode = true;
+        if (channel != null) {
+            this.liveLyricsChannelId = channel.getIdLong();
+        }
+        AudioTrack current = player.getPlayingTrack();
+        if (current == null)
+            return;
+
+        ensureLyricsFetchedAndDisplay(current, channel);
     }
 
     private long lastWatchdogAction = 0;
@@ -200,7 +290,8 @@ public class MusicManager {
         player.addListener(scheduler);
         secondaryPlayer.addListener(scheduler);
 
-        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());
+        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager
+                .getInstance().getSettings(guild.getId());
         player.setVolume(settings.getDefaultVolume());
         secondaryPlayer.setVolume(settings.getDefaultVolume());
         this.mode247 = settings.isMode247();
@@ -247,27 +338,52 @@ public class MusicManager {
             }
         }, 5, 5, TimeUnit.SECONDS);
 
-        // Start Karaoke Ticker
+        // Start Karaoke / Live Lyrics Ticker (300ms for instant real-time highlighting)
         this.karaokeTask = PlayerManager.scheduledExecutor.scheduleAtFixedRate(() -> {
             try {
-                if (!karaokeMode || scheduler.isPaused()) return;
+                if (!karaokeMode || scheduler.isPaused())
+                    return;
                 AudioTrack current = player.getPlayingTrack();
-                if (current == null) return;
+                if (current == null)
+                    return;
 
-                ensureLyricsFetched(current);
+                if (liveLyricsChannelId != -1 && (karaokeLines == null || karaokeLines.isEmpty()) && !fetchingLyrics
+                        && lastActiveLineIndex == -2) {
+                    net.dv8tion.jda.api.entities.channel.middleman.MessageChannel ch = guild.getJDA()
+                            .getTextChannelById(liveLyricsChannelId);
+                    if (ch != null) {
+                        ensureLyricsFetchedAndDisplay(current, ch);
+                    }
+                }
 
-                if (karaokeLines != null && !karaokeLines.isEmpty()) {
+                if (liveLyricsMessageId != -1 && liveLyricsChannelId != -1 && karaokeLines != null
+                        && !karaokeLines.isEmpty()) {
                     long pos = current.getPosition();
-                    String activeLine = KaraokeManager.getActiveLine(karaokeLines, pos);
-                    if (activeLine != null && !activeLine.equals(lastKaraokeLine)) {
-                        lastKaraokeLine = activeLine;
-                        sendNowPlayingMessage(false);
+                    int activeIndex = KaraokeManager.getActiveLineIndex(karaokeLines, pos);
+                    if (activeIndex != lastActiveLineIndex) {
+                        lastActiveLineIndex = activeIndex;
+                        net.dv8tion.jda.api.entities.channel.middleman.MessageChannel ch = guild.getJDA()
+                                .getTextChannelById(liveLyricsChannelId);
+                        if (ch != null) {
+                            var container = com.discord.musicbot.commands.framework.EmbedHelper
+                                    .createLiveLyricsContainer(
+                                            current.getInfo().title, current.getInfo().author, karaokeLines,
+                                            activeIndex, null);
+                            ch.editMessageComponentsById(liveLyricsMessageId, container)
+                                    .useComponentsV2()
+                                    .queue(null, e -> {
+                                        if (e instanceof net.dv8tion.jda.api.exceptions.ErrorResponseException ere
+                                                && ere.getErrorResponse() == net.dv8tion.jda.api.requests.ErrorResponse.UNKNOWN_MESSAGE) {
+                                            liveLyricsMessageId = -1;
+                                        }
+                                    });
+                        }
                     }
                 }
             } catch (Exception e) {
                 logger.error("Error in karaoke task", e);
             }
-        }, 2, 2, TimeUnit.SECONDS);
+        }, 300, 300, TimeUnit.MILLISECONDS);
 
         logger.debug("MusicManager created for guild: {}", guild.getName());
     }
@@ -352,7 +468,7 @@ public class MusicManager {
         }
         guild.getAudioManager().setSelfDeafened(true);
         guild.getAudioManager().openAudioConnection(vc);
-        
+
         updateVoiceChannelStatus(com.discord.musicbot.config.EmojiConfig.getInstance().music + " Playing music!");
     }
 
@@ -373,12 +489,15 @@ public class MusicManager {
         deleteNowPlayingMessage();
         com.discord.musicbot.data.SessionManager.getInstance().updateSnapshot(guild.getId(), null);
         PlayerManager.getInstance().removeMusicManager(guild.getIdLong());
-        
+
         // Fix Memory Leaks
         cancelIdleTimeout();
-        if (aloneTask != null) aloneTask.cancel(true);
-        if (watchdogTask != null) watchdogTask.cancel(true);
-        if (karaokeTask != null) karaokeTask.cancel(true);
+        if (aloneTask != null)
+            aloneTask.cancel(true);
+        if (watchdogTask != null)
+            watchdogTask.cancel(true);
+        if (karaokeTask != null)
+            karaokeTask.cancel(true);
         player.destroy();
     }
 
@@ -402,33 +521,42 @@ public class MusicManager {
         net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel tc = null;
         if (nowPlayingChannelId != null) {
             try {
-                tc = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, nowPlayingChannelId);
-            } catch (Exception ignored) {}
+                tc = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class,
+                        nowPlayingChannelId);
+            } catch (Exception ignored) {
+            }
         }
         if (tc == null) {
             try {
-                com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());
+                com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager
+                        .getInstance().getSettings(guild.getId());
                 if (settings.getCommandChannelId() != null && !settings.getCommandChannelId().isEmpty()) {
-                    tc = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class, settings.getCommandChannelId());
+                    tc = guild.getChannelById(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel.class,
+                            settings.getCommandChannelId());
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         if (tc == null) {
             try {
-                if (guild.getSystemChannel() != null && guild.getSelfMember().hasPermission(guild.getSystemChannel(), net.dv8tion.jda.api.Permission.MESSAGE_SEND)) {
+                if (guild.getSystemChannel() != null && guild.getSelfMember().hasPermission(guild.getSystemChannel(),
+                        net.dv8tion.jda.api.Permission.MESSAGE_SEND)) {
                     tc = guild.getSystemChannel();
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         if (tc == null) {
             try {
                 for (net.dv8tion.jda.api.entities.channel.concrete.TextChannel ch : guild.getTextChannels()) {
-                    if (guild.getSelfMember().hasPermission(ch, net.dv8tion.jda.api.Permission.MESSAGE_SEND, net.dv8tion.jda.api.Permission.VIEW_CHANNEL)) {
+                    if (guild.getSelfMember().hasPermission(ch, net.dv8tion.jda.api.Permission.MESSAGE_SEND,
+                            net.dv8tion.jda.api.Permission.VIEW_CHANNEL)) {
                         tc = ch;
                         break;
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         if (tc != null && nowPlayingChannelId == null) {
             nowPlayingChannelId = tc.getId();
@@ -473,21 +601,25 @@ public class MusicManager {
         sendNowPlayingMessage(forceNew, null);
     }
 
-    public synchronized void sendNowPlayingMessage(boolean forceNew, com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
-        if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId()).isAnnounceTracks()) return;
-        
+    public synchronized void sendNowPlayingMessage(boolean forceNew,
+            com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
+        if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId()).isAnnounceTracks())
+            return;
+
         net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel channel = getAnnouncementChannel();
         if (channel == null)
             return;
         if (isSendingNowPlaying)
             return; // Prevent concurrent duplicate sends
 
-        com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride : scheduler.getCurrentTrack();
+        com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride
+                : scheduler.getCurrentTrack();
         if (track == null)
             return;
 
         final net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel finalChannel = channel;
-        java.util.List<net.dv8tion.jda.api.components.MessageTopLevelComponent> components = createNowPlayingContainer(trackOverride);
+        java.util.List<net.dv8tion.jda.api.components.MessageTopLevelComponent> components = createNowPlayingContainer(
+                trackOverride);
         if (components == null || components.isEmpty())
             return;
 
@@ -500,8 +632,6 @@ public class MusicManager {
                 nowPlayingMessageId = null;
             }
         }
-
-
 
         try {
             finalizeNowPlayingMessage(finalChannel, components);
@@ -549,8 +679,10 @@ public class MusicManager {
         return createNowPlayingContainer(null);
     }
 
-    public java.util.List<net.dv8tion.jda.api.components.MessageTopLevelComponent> createNowPlayingContainer(com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
-        com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride : scheduler.getCurrentTrack();
+    public java.util.List<net.dv8tion.jda.api.components.MessageTopLevelComponent> createNowPlayingContainer(
+            com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
+        com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride
+                : scheduler.getCurrentTrack();
         if (track == null)
             return null;
 
@@ -591,18 +723,20 @@ public class MusicManager {
         String authorName = isMewsic ? "Mewsic" : guild.getJDA().getSelfUser().getName();
 
         String desc = String.format(
-                "**[%s](%s)**\n" + com.discord.musicbot.config.EmojiConfig.getInstance().queuedBy + " **Queued by:** %s\n" + com.discord.musicbot.config.EmojiConfig.getInstance().duration + " **Duration:** **%s**",
+                "**[%s](%s)**\n" + com.discord.musicbot.config.EmojiConfig.getInstance().queuedBy
+                        + " **Queued by:** %s\n" + com.discord.musicbot.config.EmojiConfig.getInstance().duration
+                        + " **Duration:** **%s**",
                 title, track.getInfo().uri, requester, formatTime(track.getDuration()));
-        if (karaokeMode && lastKaraokeLine != null) {
-            desc += "\n\n**Karaoke:**\n*" + lastKaraokeLine + "*";
-        }
 
         String loopModeStr = scheduler.getLoopMode().name().charAt(0)
                 + scheduler.getLoopMode().name().substring(1).toLowerCase();
         java.util.List<String> activeModes = new java.util.ArrayList<>();
-        if (!loopModeStr.equals("Off")) activeModes.add(loopModeStr);
-        if (scheduler.isAutoPlay()) activeModes.add("Autoplay");
-        if (scheduler.isRandomPlay()) activeModes.add("Random");
+        if (!loopModeStr.equals("Off"))
+            activeModes.add(loopModeStr);
+        if (scheduler.isAutoPlay())
+            activeModes.add("Autoplay");
+        if (scheduler.isRandomPlay())
+            activeModes.add("Random");
         String loopStr = activeModes.isEmpty() ? "Off" : String.join(" + ", activeModes);
 
         StringBuilder footer = new StringBuilder();
@@ -620,15 +754,15 @@ public class MusicManager {
                     Thumbnail.fromUrl(artworkUrl),
                     TextDisplay.of("### " + authorName + " | " + status),
                     TextDisplay.of(desc),
-                    TextDisplay.of("-# " + footer.toString())
-            ));
+                    TextDisplay.of("-# " + footer.toString())));
         } else {
             children.add(TextDisplay.of("### " + authorName + " | " + status));
             children.add(TextDisplay.of(desc));
             children.add(TextDisplay.of("-# " + footer.toString()));
         }
 
-        Container container = Container.of(children).withAccentColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN);
+        Container container = Container.of(children)
+                .withAccentColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN);
         java.util.List<net.dv8tion.jda.api.components.MessageTopLevelComponent> components = new java.util.ArrayList<>();
         components.add(container);
         components.addAll(com.discord.musicbot.commands.framework.EmbedHelper.createNowPlayingComponents(this));
@@ -644,7 +778,7 @@ public class MusicManager {
         if (aloneTask != null && !aloneTask.isDone()) {
             aloneTask.cancel(false);
         }
-        
+
         // If the bot was already paused by a user, we shouldn't auto-resume later.
         // If it wasn't paused, we pause it now and mark it for auto-resume.
         if (scheduler.getCurrentTrack() != null) {
@@ -652,7 +786,7 @@ public class MusicManager {
                 wasAlonePaused = true;
                 scheduler.pause();
             }
-            
+
             // Update now playing embed and voice channel status
             sendNowPlayingMessage(false, null);
             updateVoiceChannelStatus();
@@ -661,13 +795,16 @@ public class MusicManager {
         aloneTask = PlayerManager.scheduledExecutor.schedule(() -> {
             try {
                 boolean isPlayingOrQueued = scheduler.getCurrentTrack() != null || !scheduler.getQueue().isEmpty();
-                
+
                 if (mode247) {
                     if (isPlayingOrQueued) {
                         logger.info("Alone timeout reached (24/7 mode) for guild: {}", guild.getName());
-                        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());
+                        com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager
+                                .getInstance().getSettings(guild.getId());
                         if (settings.isMode247Locked()) {
-                            logger.info("Alone timeout reached (24/7 mode) for guild: {} - Session is LOCKED, ignoring.", guild.getName());
+                            logger.info(
+                                    "Alone timeout reached (24/7 mode) for guild: {} - Session is LOCKED, ignoring.",
+                                    guild.getName());
                         } else {
                             sendSimpleEmbed(com.discord.musicbot.commands.framework.EmbedHelper.MSG_STOP
                                     + " Stopped playback and cleared the queue because I was left alone for 3 minutes.");
@@ -676,7 +813,8 @@ public class MusicManager {
                             updateVoiceChannelStatus();
                         }
                     } else {
-                        logger.info("Alone timeout reached (24/7 mode) for guild: {} - Already stopped, staying quiet.", guild.getName());
+                        logger.info("Alone timeout reached (24/7 mode) for guild: {} - Already stopped, staying quiet.",
+                                guild.getName());
                     }
                 } else {
                     logger.info("Alone timeout reached for guild: {}", guild.getName());
@@ -702,7 +840,7 @@ public class MusicManager {
             logger.info("Auto-resuming playback.");
             scheduler.resume();
             wasAlonePaused = false;
-            
+
             // Update now playing embed and voice channel status
             sendNowPlayingMessage(false, null);
             updateVoiceChannelStatus();
@@ -723,8 +861,8 @@ public class MusicManager {
             net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel ch = getAnnouncementChannel();
             if (ch != null) {
                 var container = net.dv8tion.jda.api.components.container.Container.of(
-                        net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(message)
-                ).withAccentColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN);
+                        net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(message))
+                        .withAccentColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN);
                 ch.sendMessageComponents(container).useComponentsV2().queue();
             }
         } catch (Exception e) {
@@ -741,7 +879,8 @@ public class MusicManager {
      * NOTE: Requires JDA version with setStatus() support.
      */
     public void updateVoiceChannelStatus() {
-        if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId()).isUpdateVcStatus()) {
+        if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId())
+                .isUpdateVcStatus()) {
             clearVoiceChannelStatus();
             return;
         }
@@ -783,8 +922,9 @@ public class MusicManager {
                         isMewsic = true;
                     }
                 }
-                
-                String prefix = isMewsic ? com.discord.musicbot.config.EmojiConfig.getInstance().mewsic + " Mewsic: " : "";
+
+                String prefix = isMewsic ? com.discord.musicbot.config.EmojiConfig.getInstance().mewsic + " Mewsic: "
+                        : "";
                 status = prefix + title;
                 if (status.length() > 500) {
                     status = status.substring(0, 497) + "...";
@@ -814,15 +954,18 @@ public class MusicManager {
                 }
             }
 
-            if (voiceChannel == null) return;
+            if (voiceChannel == null)
+                return;
 
             if (!guild.getSelfMember().hasPermission(voiceChannel,
                     net.dv8tion.jda.api.Permission.MANAGE_CHANNEL)) {
                 return;
             }
 
-            voiceChannel.modifyStatus("").queue(null, e -> {});
-        } catch (Exception e) {}
+            voiceChannel.modifyStatus("").queue(null, e -> {
+            });
+        } catch (Exception e) {
+        }
     }
 
     private long lastNPUpdate = 0;
@@ -935,16 +1078,23 @@ public class MusicManager {
         this.activeVoiceChannelId = snapshot.voiceChannelId;
         if (snapshot.voiceChannelId != null) {
             net.dv8tion.jda.api.entities.channel.middleman.AudioChannel vc = guild
-                    .getChannelById(net.dv8tion.jda.api.entities.channel.middleman.AudioChannel.class, snapshot.voiceChannelId);
-            if (vc == null) vc = guild.getVoiceChannelById(snapshot.voiceChannelId);
-            if (vc == null) vc = guild.getStageChannelById(snapshot.voiceChannelId);
+                    .getChannelById(net.dv8tion.jda.api.entities.channel.middleman.AudioChannel.class,
+                            snapshot.voiceChannelId);
+            if (vc == null)
+                vc = guild.getVoiceChannelById(snapshot.voiceChannelId);
+            if (vc == null)
+                vc = guild.getStageChannelById(snapshot.voiceChannelId);
             if (vc != null) {
                 // If JDA thinks we are already connected (ghost connection), force a reconnect
                 // to establish a clean UDP audio socket with Discord.
-                if (guild.getSelfMember().getVoiceState() != null && guild.getSelfMember().getVoiceState().inAudioChannel()) {
+                if (guild.getSelfMember().getVoiceState() != null
+                        && guild.getSelfMember().getVoiceState().inAudioChannel()) {
                     markDeliberateDisconnect();
                     guild.getAudioManager().closeAudioConnection();
-                    try { Thread.sleep(500); } catch (Exception ignored) {} // Give Discord time to process the drop
+                    try {
+                        Thread.sleep(500);
+                    } catch (Exception ignored) {
+                    } // Give Discord time to process the drop
                 }
                 guild.getAudioManager().setSelfDeafened(true);
                 guild.getAudioManager().openAudioConnection(vc);
@@ -964,7 +1114,7 @@ public class MusicManager {
         }
         scheduler.setRandomPlay(snapshot.randomPlay);
         scheduler.setPaused(snapshot.isPaused);
-        
+
         this.wasAlonePaused = snapshot.wasAlonePaused;
 
         if (snapshot.currentTrackEncoded != null) {
@@ -999,7 +1149,7 @@ public class MusicManager {
         if (snapshot.isPaused) {
             scheduler.pause();
         }
-        
+
         // Force the Now Playing panel to re-render so the user knows it recovered
         if (scheduler.getCurrentTrack() != null) {
             updateNowPlayingMessage();
@@ -1020,7 +1170,8 @@ public class MusicManager {
         if (!PlayerManager.isShuttingDown) {
             // Reset persisted states so they don't leak into the next session
             try {
-                com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId());
+                com.discord.musicbot.data.model.GuildSettings settings = com.discord.musicbot.data.GuildSettingsManager
+                        .getInstance().getSettings(guild.getId());
                 if (mode247) {
                     mode247 = false;
                     settings.setMode247(false);
@@ -1065,20 +1216,26 @@ public class MusicManager {
     public void cleanup() {
         markDeliberateDisconnect();
         try {
-            SessionManager.getInstance().updateSnapshot(guild.getId(), toSessionSnapshot()); // Force save before shutdown (must be done before closeAudioConnection)
+            SessionManager.getInstance().updateSnapshot(guild.getId(), toSessionSnapshot()); // Force save before
+                                                                                             // shutdown (must be done
+                                                                                             // before
+                                                                                             // closeAudioConnection)
         } catch (Exception e) {
             logger.warn("Failed to force save session: {}", e.getMessage());
         }
 
-        // Send voice disconnection opcode immediately over WebSocket before blocking on REST API calls
+        // Send voice disconnection opcode immediately over WebSocket before blocking on
+        // REST API calls
         try {
             guild.getAudioManager().closeAudioConnection();
             guild.getJDA().getDirectAudioController().disconnect(guild);
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         try {
             var voiceState = guild.getSelfMember().getVoiceState();
-            if (voiceState != null && voiceState.getChannel() instanceof net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel vc) {
+            if (voiceState != null && voiceState
+                    .getChannel() instanceof net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel vc) {
                 vc.modifyStatus("").submit().get(2, java.util.concurrent.TimeUnit.SECONDS);
             }
         } catch (Exception e) {
@@ -1100,9 +1257,12 @@ public class MusicManager {
         }
 
         cancelIdleTimeout();
-        if (aloneTask != null) aloneTask.cancel(true);
-        if (watchdogTask != null) watchdogTask.cancel(true);
-        if (karaokeTask != null) karaokeTask.cancel(true);
+        if (aloneTask != null)
+            aloneTask.cancel(true);
+        if (watchdogTask != null)
+            watchdogTask.cancel(true);
+        if (karaokeTask != null)
+            karaokeTask.cancel(true);
 
         scheduler.cleanup();
         player.destroy();
@@ -1112,7 +1272,8 @@ public class MusicManager {
     private String lastVCStatusString = "";
 
     public void updateVoiceChannelStatus(String status) {
-        if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId()).isUpdateVcStatus()) return;
+        if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId()).isUpdateVcStatus())
+            return;
 
         String cleanStatus = status == null ? "" : status;
         if (cleanStatus.length() > 500) {

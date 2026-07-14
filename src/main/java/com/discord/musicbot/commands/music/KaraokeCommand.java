@@ -24,11 +24,11 @@ public class KaraokeCommand extends SlashCommand {
 
         boolean currentMode = manager.isKaraokeMode();
         if (!currentMode) {
-            manager.enableInstantKaraoke();
-            ctx.replySuccess("**Live Karaoke Mode ENABLED!** Instant synced lyrics will now track and appear in real-time on the Now Playing embed.");
+            manager.enableInstantKaraoke(ctx.getChannel());
+            ctx.replySuccess("**Live Karaoke Mode ENABLED!** Instant synced lyrics container is now active and tracking in real-time below.");
         } else {
             manager.setKaraokeMode(false);
-            ctx.replySuccess("**Karaoke Mode DISABLED.**");
+            ctx.replySuccess("**Karaoke Mode DISABLED.** The live lyrics container has been cleaned up.");
         }
     }
 

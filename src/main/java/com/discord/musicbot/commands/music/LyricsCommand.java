@@ -32,11 +32,11 @@ public class LyricsCommand extends SlashCommand {
                 return;
             }
             if (live) {
-                mm.enableInstantKaraoke();
-                ctx.replySuccess("**Live Instant Lyrics Enabled!** Synced real-time timestamped lyrics are now active and tracking on the Now Playing display!");
+                mm.enableInstantKaraoke(ctx.getChannel());
+                ctx.replySuccess("**Live Instant Lyrics Enabled!** Synced real-time timestamped lyrics are now active and tracking in a dedicated container below!");
             } else {
                 mm.setKaraokeMode(false);
-                ctx.replySuccess("**Live Lyrics Disabled.** Synced lyrics will no longer appear on the Now Playing display.");
+                ctx.replySuccess("**Live Lyrics Disabled.** The live lyrics container has been cleaned up.");
             }
             return;
         }

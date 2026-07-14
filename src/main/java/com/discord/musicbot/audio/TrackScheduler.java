@@ -171,6 +171,9 @@ public class TrackScheduler extends AudioEventAdapter {
 
         musicManager.resetKaraokeTrack();
         musicManager.sendNowPlayingMessage(false, track);
+        if (musicManager.isKaraokeMode()) {
+            musicManager.ensureLyricsFetchedAndDisplay(track, null);
+        }
 
         String cleanTitle = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(track.getInfo().title);
         String cleanAuthor = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(track.getInfo().author);
@@ -932,6 +935,7 @@ public class TrackScheduler extends AudioEventAdapter {
         player.stopTrack();
 
         musicManager.deleteNowPlayingMessage();
+        musicManager.cleanupLiveLyricsContainer();
         currentTrack = null;
         loopMode = LoopMode.OFF;
         autoplay = false;
@@ -955,6 +959,7 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
     public void cleanup() {
+        musicManager.cleanupLiveLyricsContainer();
         if (player != null) {
             player.stopTrack();
         }
@@ -1308,6 +1313,7 @@ public class TrackScheduler extends AudioEventAdapter {
         }
         if (currentTrack == null || !endReason.mayStartNext) {
             removeExclusions();
+            musicManager.cleanupLiveLyricsContainer();
         }
     }
 

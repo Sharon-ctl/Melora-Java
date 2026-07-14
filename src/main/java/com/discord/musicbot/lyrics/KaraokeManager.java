@@ -39,17 +39,34 @@ public class KaraokeManager {
         return lines;
     }
 
-    public static String getActiveLine(List<LrcLine> lines, long currentPositionMs) {
-        if (lines == null || lines.isEmpty()) return null;
-        
-        String activeText = lines.get(0).text;
-        for (LrcLine line : lines) {
-            if (currentPositionMs >= line.timestampMs) {
-                activeText = line.text;
+    public static int getActiveLineIndex(List<LrcLine> lines, long currentPositionMs) {
+        if (lines == null || lines.isEmpty()) return -1;
+
+        int activeIdx = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            if (currentPositionMs >= lines.get(i).timestampMs) {
+                activeIdx = i;
             } else {
                 break;
             }
         }
-        return activeText;
+        return activeIdx;
+    }
+
+    public static List<LrcLine> getActiveLineWindow(List<LrcLine> lines, int activeIndex, int windowBefore, int windowAfter) {
+        if (lines == null || lines.isEmpty()) return new ArrayList<>();
+        int start = Math.max(0, activeIndex - windowBefore);
+        int end = Math.min(lines.size() - 1, Math.max(0, activeIndex) + windowAfter);
+        return new ArrayList<>(lines.subList(start, end + 1));
+    }
+
+    public static String getActiveLine(List<LrcLine> lines, long currentPositionMs) {
+        int idx = getActiveLineIndex(lines, currentPositionMs);
+        if (idx >= 0 && idx < lines.size()) {
+            return lines.get(idx).text;
+        } else if (lines != null && !lines.isEmpty()) {
+            return lines.get(0).text;
+        }
+        return null;
     }
 }
