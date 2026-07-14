@@ -95,6 +95,7 @@ public class MusicManager {
     private volatile long liveLyricsMessageId = -1;
     private volatile long liveLyricsChannelId = -1;
     private volatile int lastActiveLineIndex = -2;
+    private volatile boolean isSendingLiveLyrics = false;
 
     public boolean isKaraokeMode() {
         return karaokeMode;
@@ -119,6 +120,7 @@ public class MusicManager {
         karaokeLines = null;
         fetchingLyrics = false;
         lastActiveLineIndex = -2;
+        isSendingLiveLyrics = false;
     }
 
     public List<KaraokeManager.LrcLine> getKaraokeLines() {
@@ -135,6 +137,7 @@ public class MusicManager {
             long chId = liveLyricsChannelId;
             liveLyricsMessageId = -1;
             lastActiveLineIndex = -2;
+            isSendingLiveLyrics = false;
             net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel = guild.getJDA()
                     .getTextChannelById(chId);
             if (channel == null) {
@@ -147,6 +150,7 @@ public class MusicManager {
         } else {
             liveLyricsMessageId = -1;
             lastActiveLineIndex = -2;
+            isSendingLiveLyrics = false;
         }
     }
 
@@ -168,11 +172,11 @@ public class MusicManager {
             }
         }
         if (this.karaokeLines != null && !this.karaokeLines.isEmpty()) {
-            sendOrUpdateLiveLyricsContainer(current, this.karaokeLines, null);
+            sendOrUpdateLiveLyricsContainer(current, this.karaokeLines, null, true);
             return;
         }
         fetchingLyrics = true;
-        sendOrUpdateLiveLyricsContainer(current, null, com.discord.musicbot.config.EmojiConfig.getInstance().music + " Searching for live synced lyrics...");
+        sendOrUpdateLiveLyricsContainer(current, null, com.discord.musicbot.config.EmojiConfig.getInstance().music + " Searching for live synced lyrics...", true);
 
         String query = current.getInfo().author + " " + current.getInfo().title;
         query = query.replaceAll("(?i)\\b(official|music video|audio|lyric video|lyrics)\\b", "")
@@ -186,7 +190,7 @@ public class MusicManager {
                     karaokeLines = KaraokeManager.parseLrc(syncedLrc);
                     long pos = current.getPosition();
                     lastActiveLineIndex = KaraokeManager.getActiveLineIndex(karaokeLines, pos);
-                    sendOrUpdateLiveLyricsContainer(current, karaokeLines, null);
+                    sendOrUpdateLiveLyricsContainer(current, karaokeLines, null, true);
                 } else {
                     // Try normal fetchLyrics fallback
                     var lyricsResult = LyricsManager.fetchLyrics(finalQuery).get(4, TimeUnit.SECONDS);
@@ -195,17 +199,17 @@ public class MusicManager {
                         karaokeLines = KaraokeManager.parseLrc(lyricsResult.text);
                         long pos = current.getPosition();
                         lastActiveLineIndex = KaraokeManager.getActiveLineIndex(karaokeLines, pos);
-                        sendOrUpdateLiveLyricsContainer(current, karaokeLines, null);
+                        sendOrUpdateLiveLyricsContainer(current, karaokeLines, null, true);
                     } else {
                         karaokeLines = new ArrayList<>();
                         sendOrUpdateLiveLyricsContainer(current, null,
-                                com.discord.musicbot.config.EmojiConfig.getInstance().error + " No live synced lyrics found for **" + escapeMarkdownHelper(finalQuery) + "**.");
+                                com.discord.musicbot.config.EmojiConfig.getInstance().error + " No live synced lyrics found for **" + escapeMarkdownHelper(finalQuery) + "**.", true);
                     }
                 }
             } catch (Exception e) {
                 karaokeLines = new ArrayList<>();
                 sendOrUpdateLiveLyricsContainer(current, null,
-                        com.discord.musicbot.config.EmojiConfig.getInstance().error + " No live synced lyrics found for **" + escapeMarkdownHelper(finalQuery) + "**.");
+                        com.discord.musicbot.config.EmojiConfig.getInstance().error + " No live synced lyrics found for **" + escapeMarkdownHelper(finalQuery) + "**.", true);
             } finally {
                 fetchingLyrics = false;
             }
@@ -218,6 +222,11 @@ public class MusicManager {
 
     public synchronized void sendOrUpdateLiveLyricsContainer(AudioTrack current, List<KaraokeManager.LrcLine> lines,
             String statusMessage) {
+        sendOrUpdateLiveLyricsContainer(current, lines, statusMessage, false);
+    }
+
+    public synchronized void sendOrUpdateLiveLyricsContainer(AudioTrack current, List<KaraokeManager.LrcLine> lines,
+            String statusMessage, boolean force) {
         if (!karaokeMode)
             return;
         net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel = null;
@@ -235,6 +244,10 @@ public class MusicManager {
 
         long pos = current.getPosition();
         int activeIdx = (lines != null && !lines.isEmpty()) ? KaraokeManager.getActiveLineIndex(lines, pos) : -1;
+
+        if (!force && statusMessage == null && activeIdx == this.lastActiveLineIndex && liveLyricsMessageId != -1) {
+            return; // No line change and message already exists
+        }
         this.lastActiveLineIndex = activeIdx;
 
         var container = com.discord.musicbot.commands.framework.EmbedHelper.createLiveLyricsContainer(
@@ -249,14 +262,23 @@ public class MusicManager {
                         if (e instanceof net.dv8tion.jda.api.exceptions.ErrorResponseException ere && ere
                                 .getErrorResponse() == net.dv8tion.jda.api.requests.ErrorResponse.UNKNOWN_MESSAGE) {
                             liveLyricsMessageId = -1;
-                            finalCh.sendMessageComponents(container).useComponentsV2()
-                                    .queue(msg -> liveLyricsMessageId = msg.getIdLong(), err -> {
-                                    });
+                            sendOrUpdateLiveLyricsContainer(current, lines, statusMessage, true);
                         }
                     });
         } else {
+            if (isSendingLiveLyrics) {
+                return; // Prevent duplicate message creation while initial container is across network
+            }
+            isSendingLiveLyrics = true;
             finalCh.sendMessageComponents(container).useComponentsV2()
-                    .queue(msg -> liveLyricsMessageId = msg.getIdLong(), err -> {
+                    .queue(msg -> {
+                        liveLyricsMessageId = msg.getIdLong();
+                        isSendingLiveLyrics = false;
+                        if (this.karaokeLines != null && !this.karaokeLines.isEmpty()) {
+                            sendOrUpdateLiveLyricsContainer(current, this.karaokeLines, null, true);
+                        }
+                    }, err -> {
+                        isSendingLiveLyrics = false;
                     });
         }
     }
@@ -354,31 +376,8 @@ public class MusicManager {
                     if (ch != null) {
                         ensureLyricsFetchedAndDisplay(current, ch);
                     }
-                }
-
-                if (liveLyricsMessageId != -1 && liveLyricsChannelId != -1 && karaokeLines != null
-                        && !karaokeLines.isEmpty()) {
-                    long pos = current.getPosition();
-                    int activeIndex = KaraokeManager.getActiveLineIndex(karaokeLines, pos);
-                    if (activeIndex != lastActiveLineIndex) {
-                        lastActiveLineIndex = activeIndex;
-                        net.dv8tion.jda.api.entities.channel.middleman.MessageChannel ch = guild.getJDA()
-                                .getTextChannelById(liveLyricsChannelId);
-                        if (ch != null) {
-                            var container = com.discord.musicbot.commands.framework.EmbedHelper
-                                    .createLiveLyricsContainer(
-                                            current.getInfo().title, current.getInfo().author, karaokeLines,
-                                            activeIndex, null);
-                            ch.editMessageComponentsById(liveLyricsMessageId, container)
-                                    .useComponentsV2()
-                                    .queue(null, e -> {
-                                        if (e instanceof net.dv8tion.jda.api.exceptions.ErrorResponseException ere
-                                                && ere.getErrorResponse() == net.dv8tion.jda.api.requests.ErrorResponse.UNKNOWN_MESSAGE) {
-                                            liveLyricsMessageId = -1;
-                                        }
-                                    });
-                        }
-                    }
+                } else if (liveLyricsChannelId != -1 && karaokeLines != null && !karaokeLines.isEmpty()) {
+                    sendOrUpdateLiveLyricsContainer(current, karaokeLines, null, false);
                 }
             } catch (Exception e) {
                 logger.error("Error in karaoke task", e);
@@ -741,9 +740,6 @@ public class MusicManager {
 
         StringBuilder footer = new StringBuilder();
         footer.append(String.format("Vol: %d%% | Loop: %s", player.getVolume(), loopStr));
-        if (this.is247()) {
-            footer.append(" | 24/7: On");
-        }
         footer.append(String.format(" | Queue: %d tracks", scheduler.getQueue().size()));
 
         java.util.List<ContainerChildComponent> children = new java.util.ArrayList<>();

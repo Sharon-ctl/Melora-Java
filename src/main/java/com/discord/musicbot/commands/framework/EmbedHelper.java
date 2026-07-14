@@ -256,8 +256,7 @@ public class EmbedHelper {
                 String lineText = line.text.isBlank() ? com.discord.musicbot.config.EmojiConfig.getInstance().music : line.text;
 
                 if (activeIndex >= 0 && activeIndex < lines.size()
-                        && line.timestampMs == lines.get(activeIndex).timestampMs
-                        && line.text.equals(lines.get(activeIndex).text)) {
+                        && line == lines.get(activeIndex)) {
                     content.append(com.discord.musicbot.config.EmojiConfig.getInstance().play).append(" **").append(timeStr).append(" ").append(lineText).append("**\n");
                 } else {
                     content.append(timeStr).append(" ").append(lineText).append("\n");

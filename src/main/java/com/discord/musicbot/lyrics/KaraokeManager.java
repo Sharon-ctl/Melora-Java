@@ -6,7 +6,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class KaraokeManager {
-    private static final Pattern LRC_PATTERN = Pattern.compile("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})\\](.*)");
+    private static final Pattern LRC_PATTERN = Pattern.compile("\\[(\\d{1,3}):(\\d{2})[\\.:](\\d{1,3})\\](.*)");
 
     public static class LrcLine {
         public final long timestampMs;
@@ -23,12 +23,14 @@ public class KaraokeManager {
         if (lrc == null || lrc.isBlank()) return lines;
 
         for (String line : lrc.split("\n")) {
-            Matcher m = LRC_PATTERN.matcher(line);
+            Matcher m = LRC_PATTERN.matcher(line.trim());
             if (m.matches()) {
                 long min = Long.parseLong(m.group(1));
                 long sec = Long.parseLong(m.group(2));
                 long ms = Long.parseLong(m.group(3));
-                if (m.group(3).length() == 2) {
+                if (m.group(3).length() == 1) {
+                    ms *= 100;
+                } else if (m.group(3).length() == 2) {
                     ms *= 10;
                 }
                 long timestamp = (min * 60 * 1000) + (sec * 1000) + ms;
@@ -36,6 +38,7 @@ public class KaraokeManager {
                 lines.add(new LrcLine(timestamp, text));
             }
         }
+        lines.sort(java.util.Comparator.comparingLong(l -> l.timestampMs));
         return lines;
     }
 
