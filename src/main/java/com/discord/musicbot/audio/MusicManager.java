@@ -320,12 +320,6 @@ public class MusicManager {
 
         this.tempDjs = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-        this.npExecutor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "NP-Update-" + guild.getId());
-            t.setDaemon(true);
-            return t;
-        });
-
         // Start Watchdog
         this.watchdogTask = PlayerManager.scheduledExecutor.scheduleAtFixedRate(() -> {
             try {
@@ -509,7 +503,11 @@ public class MusicManager {
     private volatile String nowPlayingMessageId;
     private final java.util.concurrent.atomic.AtomicBoolean isSendingNowPlaying = new java.util.concurrent.atomic.AtomicBoolean(false);
     private final java.util.concurrent.atomic.AtomicInteger npUpdateVersion = new java.util.concurrent.atomic.AtomicInteger(0);
-    private final java.util.concurrent.ScheduledExecutorService npExecutor;
+    private final java.util.concurrent.ScheduledExecutorService npExecutor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "NP-Update-" + guild.getId());
+        t.setDaemon(true);
+        return t;
+    });
 
     public void setNowPlayingChannel(String channelId) {
         if (nowPlayingChannelId != null && !nowPlayingChannelId.equals(channelId)) {
