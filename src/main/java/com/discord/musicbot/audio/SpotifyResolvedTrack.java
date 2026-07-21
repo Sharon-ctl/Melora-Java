@@ -28,8 +28,6 @@ public class SpotifyResolvedTrack extends DelegatedAudioTrack {
     public void process(LocalAudioTrackExecutor executor) throws Exception {
         if (delegate instanceof InternalAudioTrack internalTrack) {
             processDelegate(internalTrack, executor);
-        } else {
-            ((InternalAudioTrack) delegate).process(executor);
         }
     }
 

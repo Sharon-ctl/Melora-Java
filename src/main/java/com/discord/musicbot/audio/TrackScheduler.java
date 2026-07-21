@@ -45,6 +45,7 @@ public class TrackScheduler extends AudioEventAdapter {
     private volatile boolean crossfadeFired = false;
     private final java.util.concurrent.ScheduledFuture<?> crossfadeTask;
     private final java.util.Set<String> currentlyExcludedMemberIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private volatile boolean isNextTrackRunning = false;
 
     public TrackScheduler(AudioPlayer player, AudioPlayer secondaryPlayer, MusicManager musicManager) {
         this.player = player;
@@ -328,17 +329,20 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
     public void nextTrack() {
-        playbackGeneration.incrementAndGet();
-        if (currentTrack != null) {
-            history.addFirst(currentTrack.makeClone());
-            if (history.size() > MAX_HISTORY)
-                history.removeLast();
-        }
+        if (isNextTrackRunning) return;
+        isNextTrackRunning = true;
+        try {
+            playbackGeneration.incrementAndGet();
+            if (currentTrack != null) {
+                history.addFirst(currentTrack.makeClone());
+                if (history.size() > MAX_HISTORY)
+                    history.removeLast();
+            }
 
-        crossfadeFired = false;
-        musicManager.getSendHandler().stopCrossfade();
-        player.stopTrack();
-        secondaryPlayer.stopTrack();
+            crossfadeFired = false;
+            musicManager.getSendHandler().stopCrossfade();
+            player.stopTrack();
+            secondaryPlayer.stopTrack();
 
         if (loopMode == LoopMode.TRACK && currentTrack != null) {
             getActivePlayer().startTrack(currentTrack.makeClone(), false);
@@ -482,6 +486,9 @@ public class TrackScheduler extends AudioEventAdapter {
                     }
                 } catch (Exception ignored) {}
             }
+        }
+        } finally {
+            isNextTrackRunning = false;
         }
     }
 
@@ -1002,22 +1009,33 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
     public void pause() {
-        AudioPlayer active = getActivePlayer();
-        if (!active.isPaused()) {
-            active.setPaused(true);
+        boolean wasPaused = true;
+        if (!player.isPaused()) {
+            player.setPaused(true);
+            wasPaused = false;
+        }
+        if (!secondaryPlayer.isPaused()) {
+            secondaryPlayer.setPaused(true);
+            wasPaused = false;
+        }
+        if (!wasPaused) {
+            musicManager.updateNowPlayingMessage();
         }
     }
 
     public void resume() {
-        AudioPlayer active = getActivePlayer();
-        if (active.isPaused()) {
-            active.setPaused(false);
+        if (player.isPaused()) {
+            player.setPaused(false);
         }
+        if (secondaryPlayer.isPaused()) {
+            secondaryPlayer.setPaused(false);
+        }
+        musicManager.updateNowPlayingMessage();
     }
 
 
     public boolean isPaused() {
-        return getActivePlayer().isPaused();
+        return player.isPaused() && secondaryPlayer.isPaused();
     }
 
     public void setPaused(boolean paused) {
@@ -1307,7 +1325,7 @@ public class TrackScheduler extends AudioEventAdapter {
             if (crossfadeFired && pl != getActivePlayer()) {
                 crossfadeFired = false;
                 musicManager.getSendHandler().stopCrossfade();
-            } else {
+            } else if (!isNextTrackRunning) {
                 nextTrack();
             }
         }

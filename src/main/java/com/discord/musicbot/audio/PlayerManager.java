@@ -34,7 +34,8 @@ public class PlayerManager {
     private final DefaultAudioPlayerManager playerManager;
     private final Map<Long, MusicManager> musicManagers;
 
-    public static final java.util.concurrent.ExecutorService ioExecutor = java.util.concurrent.Executors.newCachedThreadPool(r -> {
+    public static final java.util.concurrent.ExecutorService ioExecutor = java.util.concurrent.Executors.newFixedThreadPool(
+            Math.max(4, Runtime.getRuntime().availableProcessors() * 2), r -> {
         Thread t = new Thread(r, "PlayerManager-IO");
         t.setDaemon(true);
         return t;
@@ -403,7 +404,7 @@ public class PlayerManager {
         if (title == null || title.isBlank()) return "";
         String cleaned = title.replaceAll("(?i)<yts>|\\(yts\\)|\\[yts\\]|\\byts\\b", "")
                 .replaceAll("(?i)\\b(official\\s*music\\s*video|official\\s*video|official\\s*audio|lyric\\s*video|lyrics|audio|video|hq|hd|4k|live|remastered|visualizer)\\b", "")
-                .replaceAll("[\\[\\(<>{}]+\\s*[\\]\\)>}{]]+", "")
+                .replaceAll("[\\[\\]()<>{}]+", "")
                 .replaceAll("\\s+-\\s+$", "")
                 .replaceAll("(?i)\\s*-\\s*topic$", "")
                 .replaceAll("\\s+", " ").trim();

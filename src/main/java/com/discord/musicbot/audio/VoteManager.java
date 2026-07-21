@@ -25,8 +25,8 @@ public class VoteManager {
 
     private static class ActiveVote {
         public VoteType type;
-        public Set<String> yesVotes = new HashSet<>();
-        public Set<String> noVotes = new HashSet<>();
+        public Set<String> yesVotes = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        public Set<String> noVotes = java.util.concurrent.ConcurrentHashMap.newKeySet();
         public ScheduledFuture<?> timeoutTask;
         public String messageId;
         public String channelId;

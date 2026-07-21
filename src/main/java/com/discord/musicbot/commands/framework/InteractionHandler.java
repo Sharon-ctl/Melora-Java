@@ -333,7 +333,6 @@ public class InteractionHandler {
     }
 
     private static void handleNowPlayingButtons(ButtonInteractionEvent event, String id, MusicManager manager) {
-        // np_fav doesn't need voice check
         if (id.equals("np_fav")) {
             handleFavoriteButton(event, manager);
             return;
@@ -344,7 +343,6 @@ public class InteractionHandler {
             return;
         }
 
-        // Voice state check
         var userState = event.getMember().getVoiceState();
         var botState = event.getGuild().getSelfMember().getVoiceState();
         if (userState == null || !userState.inAudioChannel() || botState == null || !botState.inAudioChannel() || !userState.getChannel().equals(botState.getChannel())) {
@@ -352,105 +350,110 @@ public class InteractionHandler {
             return;
         }
 
-        // Hardcore DJ Permission Check for playback modifications
         if (!id.equals("np_queue")) {
             if (!CommandRegistry.checkDjRole(event.getGuild(), event.getMember(), manager, event)) {
-                return; // checkDjRole automatically sends the error reply and logs the security event
+                return;
             }
         }
+
+        String fallbackMessage = null;
+        java.util.List<net.dv8tion.jda.api.components.MessageTopLevelComponent> components = null;
+        boolean needsDefer = false;
 
         switch (id) {
             case "np_pause":
                 if (manager.getScheduler().isPaused()) {
                     manager.getScheduler().resume();
+                    fallbackMessage = "Playback resumed.";
                 } else {
                     manager.getScheduler().pause();
+                    fallbackMessage = "Playback paused.";
                 }
-                var pauseComponents = manager.createNowPlayingContainer();
-                if (pauseComponents != null && !pauseComponents.isEmpty()) {
-                    event.editComponents(pauseComponents)
-                            .useComponentsV2()
-                            .setAllowedMentions(java.util.Collections.emptyList())
-                            .queue();
-                } else {
-                    replySuccess(event, "Playback is now **" + (manager.getScheduler().isPaused() ? "Paused" : "Resumed") + "**");
-                }
+                components = manager.createNowPlayingContainer();
                 break;
             case "np_skip":
                 if (manager.getScheduler().getQueueSize() == 0 && !manager.getScheduler().getAutoplay() && !manager.getScheduler().isRandomPlay() && manager.getScheduler().getLoopMode() != com.discord.musicbot.audio.TrackScheduler.LoopMode.TRACK) {
                     replyError(event, "No tracks in queue to skip to.");
-                } else {
-                    event.deferEdit().queue();
-                    manager.getScheduler().nextTrack();
+                    return;
                 }
+                needsDefer = true;
+                event.deferEdit().queue(null, e -> {});
+                manager.getScheduler().nextTrack();
+                components = manager.createNowPlayingContainer();
+                fallbackMessage = "Skipped to next track.";
                 break;
             case "np_previous":
                 if (!manager.getScheduler().hasHistory()) {
                     replyError(event, "No previous track in history.");
-                } else {
-                    event.deferEdit().queue();
-                    manager.getScheduler().previousTrack();
+                    return;
                 }
+                needsDefer = true;
+                event.deferEdit().queue(null, e -> {});
+                manager.getScheduler().previousTrack();
+                components = manager.createNowPlayingContainer();
+                fallbackMessage = "Playing previous track.";
                 break;
-
             case "np_shuffle":
                 manager.getScheduler().shuffle();
-                replySuccess(event, "Queue shuffled!");
                 manager.updateNowPlayingMessage();
-                break;
+                replySuccess(event, "Queue shuffled!");
+                return;
             case "np_loop":
-                var loopMode = manager.getScheduler().cycleLoopMode();
-                var loopComponents = manager.createNowPlayingContainer();
-                if (loopComponents != null && !loopComponents.isEmpty()) {
-                    event.editComponents(loopComponents)
-                            .useComponentsV2()
-                            .setAllowedMentions(java.util.Collections.emptyList())
-                            .queue();
-                } else {
-                    replySuccess(event, "Loop mode set to: **" + loopMode.name() + "** (Will apply when songs start playing)");
-                }
+                manager.getScheduler().cycleLoopMode();
+                components = manager.createNowPlayingContainer();
+                fallbackMessage = "Loop mode: **" + manager.getScheduler().getLoopMode().name() + "**";
                 break;
             case "np_queue":
                 if (manager.getScheduler().getQueueSize() == 0) {
                     replyError(event, "No tracks in the queue.");
-                    break;
+                    return;
                 }
                 event.replyComponents(EmbedHelper.createQueueContainer(manager, 1, null))
                         .useComponentsV2()
                         .setEphemeral(true)
                         .setAllowedMentions(java.util.Collections.emptyList())
                         .queue();
-                break;
+                return;
             case "np_voldown":
                 int newVolDown = Math.max(1, manager.getPlayer().getVolume() - 10);
                 manager.getPlayer().setVolume(newVolDown);
-                var volDownComponents = manager.createNowPlayingContainer();
-                if (volDownComponents != null && !volDownComponents.isEmpty()) {
-                    event.editComponents(volDownComponents)
-                            .useComponentsV2()
-                            .setAllowedMentions(java.util.Collections.emptyList())
-                            .queue();
-                } else {
-                    replySuccess(event, "Volume decreased to **" + newVolDown + "%**");
-                }
+                components = manager.createNowPlayingContainer();
+                fallbackMessage = "Volume decreased to **" + newVolDown + "%**";
                 break;
             case "np_volup":
                 int newVolUp = Math.min(200, manager.getPlayer().getVolume() + 10);
                 manager.getPlayer().setVolume(newVolUp);
-                var volUpComponents = manager.createNowPlayingContainer();
-                if (volUpComponents != null && !volUpComponents.isEmpty()) {
-                    event.editComponents(volUpComponents)
-                            .useComponentsV2()
-                            .setAllowedMentions(java.util.Collections.emptyList())
-                            .queue();
-                } else {
-                    replySuccess(event, "Volume increased to **" + newVolUp + "%**");
-                }
+                components = manager.createNowPlayingContainer();
+                fallbackMessage = "Volume increased to **" + newVolUp + "%**";
                 break;
             case "np_stop":
-                replySuccess(event, "Stopped playback and cleared the queue.");
                 manager.getScheduler().stop();
-                break;
+                replySuccess(event, "Stopped playback and cleared the queue.");
+                return;
+        }
+
+        if (components != null && !components.isEmpty()) {
+            if (needsDefer) {
+                event.getHook().editOriginalComponents(components)
+                        .useComponentsV2()
+                        .setAllowedMentions(java.util.Collections.emptyList())
+                        .queue(null, e -> replySuccess(event, fallbackMessage != null ? fallbackMessage : "Done."));
+            } else {
+                event.editComponents(components)
+                        .useComponentsV2()
+                        .setAllowedMentions(java.util.Collections.emptyList())
+                        .queue(null, e -> replySuccess(event, fallbackMessage != null ? fallbackMessage : "Done."));
+            }
+        } else if (fallbackMessage != null) {
+            if (needsDefer) {
+                event.getHook().sendMessageComponents(
+                    net.dv8tion.jda.api.components.container.Container.of(
+                        net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(com.discord.musicbot.commands.framework.EmbedHelper.MSG_SUCCESS + " " + fallbackMessage)
+                    ).withAccentColor(com.discord.musicbot.commands.framework.EmbedHelper.COLOR_MAIN)
+                ).useComponentsV2().setEphemeral(true).queue();
+            } else {
+                replySuccess(event, fallbackMessage);
+            }
         }
     }
 

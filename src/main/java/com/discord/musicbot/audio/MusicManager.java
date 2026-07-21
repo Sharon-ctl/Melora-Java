@@ -476,10 +476,10 @@ public class MusicManager {
      */
     public void disconnect() {
         markDeliberateDisconnect();
-        updateVoiceChannelStatus(); // Clear the voice channel status
+        updateVoiceChannelStatus();
         guild.getAudioManager().closeAudioConnection();
         scheduler.stop();
-        if (mode247) {
+        if (mode247 && !PlayerManager.isShuttingDown) {
             mode247 = false;
             if (com.discord.musicbot.data.DatabaseManager.getInstance().is247(guild.getId())) {
                 com.discord.musicbot.data.DatabaseManager.getInstance().toggle247(guild.getId());
@@ -489,7 +489,6 @@ public class MusicManager {
         com.discord.musicbot.data.SessionManager.getInstance().updateSnapshot(guild.getId(), null);
         PlayerManager.getInstance().removeMusicManager(guild.getIdLong());
 
-        // Fix Memory Leaks
         cancelIdleTimeout();
         if (aloneTask != null)
             aloneTask.cancel(true);
@@ -502,7 +501,13 @@ public class MusicManager {
 
     private volatile String nowPlayingChannelId;
     private volatile String nowPlayingMessageId;
-    private volatile boolean isSendingNowPlaying = false;
+    private final java.util.concurrent.atomic.AtomicBoolean isSendingNowPlaying = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private final java.util.concurrent.atomic.AtomicInteger npUpdateVersion = new java.util.concurrent.atomic.AtomicInteger(0);
+    private final java.util.concurrent.ScheduledExecutorService npExecutor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "NP-Update-" + guild.getId());
+        t.setDaemon(true);
+        return t;
+    });
 
     public void setNowPlayingChannel(String channelId) {
         if (nowPlayingChannelId != null && !nowPlayingChannelId.equals(channelId)) {
@@ -596,69 +601,73 @@ public class MusicManager {
         sendNowPlayingMessage(false, null);
     }
 
-    public synchronized void sendNowPlayingMessage(boolean forceNew) {
+    public void sendNowPlayingMessage(boolean forceNew) {
         sendNowPlayingMessage(forceNew, null);
     }
 
-    public synchronized void sendNowPlayingMessage(boolean forceNew,
+    public void sendNowPlayingMessage(boolean forceNew,
             com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride) {
-        if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId()).isAnnounceTracks())
-            return;
-
-        net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel channel = getAnnouncementChannel();
-        if (channel == null)
-            return;
-        if (isSendingNowPlaying)
-            return; // Prevent concurrent duplicate sends
-
-        com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride
-                : scheduler.getCurrentTrack();
-        if (track == null)
-            return;
-
-        final net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel finalChannel = channel;
-        java.util.List<net.dv8tion.jda.api.components.MessageTopLevelComponent> components = createNowPlayingContainer(
-                trackOverride);
-        if (components == null || components.isEmpty())
-            return;
-
-        isSendingNowPlaying = true;
-
-        if (forceNew) {
-            if (nowPlayingMessageId != null) {
-                finalChannel.deleteMessageById(nowPlayingMessageId).queue(null, e -> {
-                });
-                nowPlayingMessageId = null;
-            }
-        }
-
-        try {
-            finalizeNowPlayingMessage(finalChannel, components);
-        } catch (Exception e) {
-            isSendingNowPlaying = false;
-        }
+        int version = npUpdateVersion.incrementAndGet();
+        npExecutor.execute(() -> doSendNowPlayingMessage(forceNew, trackOverride, version));
     }
 
-    private void finalizeNowPlayingMessage(net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel channel,
-            java.util.List<net.dv8tion.jda.api.components.MessageTopLevelComponent> components) {
+    private void doSendNowPlayingMessage(boolean forceNew,
+            com.sedmelluq.discord.lavaplayer.track.AudioTrack trackOverride, int version) {
+        if (!com.discord.musicbot.data.GuildSettingsManager.getInstance().getSettings(guild.getId()).isAnnounceTracks())
+            return;
+        if (!isSendingNowPlaying.compareAndSet(false, true))
+            return;
+
         try {
+            net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel channel = getAnnouncementChannel();
+            if (channel == null) {
+                isSendingNowPlaying.set(false);
+                return;
+            }
+
+            com.sedmelluq.discord.lavaplayer.track.AudioTrack track = trackOverride != null ? trackOverride
+                    : scheduler.getCurrentTrack();
+            if (track == null) {
+                isSendingNowPlaying.set(false);
+                return;
+            }
+
+            java.util.List<net.dv8tion.jda.api.components.MessageTopLevelComponent> components = createNowPlayingContainer(
+                    trackOverride);
+            if (components == null || components.isEmpty()) {
+                isSendingNowPlaying.set(false);
+                return;
+            }
+
+            if (forceNew) {
+                if (nowPlayingMessageId != null) {
+                    final String oldId = nowPlayingMessageId;
+                    nowPlayingMessageId = null;
+                    channel.deleteMessageById(oldId).queue(null, e -> {});
+                }
+            }
+
             if (nowPlayingMessageId != null) {
                 channel.editMessageComponentsById(nowPlayingMessageId, components)
                         .useComponentsV2()
                         .setAllowedMentions(java.util.Collections.emptyList())
-                        .queue(success -> isSendingNowPlaying = false, e -> {
-                            nowPlayingMessageId = null;
-                            try {
-                                channel.sendMessageComponents(components)
-                                        .useComponentsV2()
-                                        .setAllowedMentions(java.util.Collections.emptyList())
-                                        .queue(msg -> {
-                                            nowPlayingMessageId = msg.getId();
-                                            isSendingNowPlaying = false;
-                                        }, err -> isSendingNowPlaying = false);
-                            } catch (Exception syncErr) {
-                                isSendingNowPlaying = false;
+                        .queue(success -> {
+                            isSendingNowPlaying.set(false);
+                            if (npUpdateVersion.get() != version) {
+                                doSendNowPlayingMessage(false, null, npUpdateVersion.get());
                             }
+                        }, e -> {
+                            nowPlayingMessageId = null;
+                            channel.sendMessageComponents(components)
+                                    .useComponentsV2()
+                                    .setAllowedMentions(java.util.Collections.emptyList())
+                                    .queue(msg -> {
+                                        nowPlayingMessageId = msg.getId();
+                                        isSendingNowPlaying.set(false);
+                                        if (npUpdateVersion.get() != version) {
+                                            doSendNowPlayingMessage(false, null, npUpdateVersion.get());
+                                        }
+                                    }, err -> isSendingNowPlaying.set(false));
                         });
             } else {
                 channel.sendMessageComponents(components)
@@ -666,11 +675,14 @@ public class MusicManager {
                         .setAllowedMentions(java.util.Collections.emptyList())
                         .queue(msg -> {
                             nowPlayingMessageId = msg.getId();
-                            isSendingNowPlaying = false;
-                        }, err -> isSendingNowPlaying = false);
+                            isSendingNowPlaying.set(false);
+                            if (npUpdateVersion.get() != version) {
+                                doSendNowPlayingMessage(false, null, npUpdateVersion.get());
+                            }
+                        }, err -> isSendingNowPlaying.set(false));
             }
         } catch (Exception e) {
-            isSendingNowPlaying = false;
+            isSendingNowPlaying.set(false);
         }
     }
 
@@ -992,18 +1004,17 @@ public class MusicManager {
             }
 
             if (channel != null) {
-                final net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel finalChannel = channel;
+                String msgId = nowPlayingMessageId;
+                nowPlayingMessageId = null;
                 if (blocking) {
-                    try {
-                        finalChannel.deleteMessageById(nowPlayingMessageId).complete();
-                    } catch (Exception ignored) {
-                    }
+                    channel.deleteMessageById(msgId).queue(null, e -> {});
                 } else {
-                    finalChannel.deleteMessageById(nowPlayingMessageId).queue(null, e -> {
+                    channel.deleteMessageById(msgId).queue(null, e -> {
                     });
                 }
+            } else {
+                nowPlayingMessageId = null;
             }
-            nowPlayingMessageId = null;
         }
     }
 
@@ -1081,16 +1092,14 @@ public class MusicManager {
             if (vc == null)
                 vc = guild.getStageChannelById(snapshot.voiceChannelId);
             if (vc != null) {
-                // If JDA thinks we are already connected (ghost connection), force a reconnect
-                // to establish a clean UDP audio socket with Discord.
                 if (guild.getSelfMember().getVoiceState() != null
                         && guild.getSelfMember().getVoiceState().inAudioChannel()) {
                     markDeliberateDisconnect();
                     guild.getAudioManager().closeAudioConnection();
-                    try {
-                        Thread.sleep(500);
-                    } catch (Exception ignored) {
-                    } // Give Discord time to process the drop
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (Exception ignored) {
                 }
                 guild.getAudioManager().setSelfDeafened(true);
                 guild.getAudioManager().openAudioConnection(vc);

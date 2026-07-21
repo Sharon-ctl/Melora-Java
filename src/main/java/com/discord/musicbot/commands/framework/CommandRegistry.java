@@ -28,11 +28,15 @@ public class CommandRegistry {
         executor.scheduleAtFixedRate(() -> {
             try {
                 long now = System.currentTimeMillis();
-                cooldowns.entrySet().removeIf(entry -> now - entry.getValue() >= 3000);
+                long cutoff = now - 3000;
+                cooldowns.entrySet().removeIf(entry -> entry.getValue() < cutoff);
+                if (cooldowns.size() > 10000) {
+                    cooldowns.clear();
+                }
             } catch (Exception e) {
                 logger.error("Error in cooldown cleanup task", e);
             }
-        }, 60, 60, java.util.concurrent.TimeUnit.SECONDS);
+        }, 10, 10, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     public void register(SlashCommand command) {
