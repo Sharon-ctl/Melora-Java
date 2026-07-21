@@ -44,15 +44,6 @@ public class SavedQueueManager {
         if (!dir.exists()) {
             dir.mkdirs();
         }
-
-        java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r);
-            t.setDaemon(true);
-            t.setName("SavedQueue-Lock-Cleanup");
-            return t;
-        }).scheduleAtFixedRate(() -> {
-            userLocks.keySet().removeIf(uid -> !cache.containsKey(uid));
-        }, 5, 5, java.util.concurrent.TimeUnit.MINUTES);
     }
 
     public static synchronized SavedQueueManager getInstance() {

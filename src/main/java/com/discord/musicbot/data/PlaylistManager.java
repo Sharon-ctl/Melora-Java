@@ -67,17 +67,6 @@ public class PlaylistManager {
         if (!playlistsDir.exists()) {
             playlistsDir.mkdirs();
         }
-
-        java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r);
-            t.setDaemon(true);
-            t.setName("Playlist-Lock-Cleanup");
-            return t;
-        }).scheduleAtFixedRate(() -> {
-            synchronized (cache) {
-                userLocks.keySet().removeIf(uid -> !cache.containsKey(uid));
-            }
-        }, 5, 5, java.util.concurrent.TimeUnit.MINUTES);
     }
 
     public static synchronized PlaylistManager getInstance() {
