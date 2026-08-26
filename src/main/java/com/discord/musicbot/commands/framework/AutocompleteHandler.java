@@ -172,32 +172,32 @@ public class AutocompleteHandler {
             choices.add(new Command.Choice(label, choiceVal));
         }
 
-        // If user typed something, search YouTube for exact song titles and artists
-        if (value.length() >= 2 && !value.startsWith("http") && !value.startsWith("scsearch:") && !value.startsWith("ytsearch:") && !value.startsWith("ytmsearch:")) {
+        // If user typed something, search SoundCloud for exact song titles and artists
+        if (value.length() >= 2 && !value.startsWith("http") && !value.startsWith("scsearch:")) {
             final List<Command.Choice> historyChoices = new ArrayList<>(choices);
-            com.discord.musicbot.audio.PlayerManager.getInstance().searchYouTube(value).thenAccept(results -> {
-                List<Command.Choice> ytChoices = new ArrayList<>();
+            com.discord.musicbot.audio.PlayerManager.getInstance().searchSoundCloud(value).thenAccept(results -> {
+                List<Command.Choice> scChoices = new ArrayList<>();
                 for (com.sedmelluq.discord.lavaplayer.track.AudioTrack track : results) {
-                    if (ytChoices.size() >= 25) break;
+                    if (scChoices.size() >= 25) break;
                     String title = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(track.getInfo().title);
                     String author = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(track.getInfo().author);
                     String label = "🔎 " + title + " — " + author;
                     if (label.length() > 95) label = label.substring(0, 95) + "...";
                     String val = track.getInfo().uri;
                     if (val == null || val.trim().isEmpty() || !val.startsWith("http")) {
-                        val = "ytmsearch:" + title + " " + author;
+                        val = "scsearch:" + title + " " + author;
                     }
                     if (val.length() > 100) val = val.substring(0, 100);
-                    ytChoices.add(new Command.Choice(label, val));
+                    scChoices.add(new Command.Choice(label, val));
                 }
                 for (Command.Choice hc : historyChoices) {
-                    if (ytChoices.size() >= 25) break;
-                    boolean exists = ytChoices.stream().anyMatch(c -> c.getName().equals(hc.getName()) || c.getAsString().equals(hc.getAsString()));
+                    if (scChoices.size() >= 25) break;
+                    boolean exists = scChoices.stream().anyMatch(c -> c.getName().equals(hc.getName()) || c.getAsString().equals(hc.getAsString()));
                     if (!exists) {
-                        ytChoices.add(hc);
+                        scChoices.add(hc);
                     }
                 }
-                event.replyChoices(ytChoices).queue();
+                event.replyChoices(scChoices).queue();
             }).exceptionally(ex -> {
                 event.replyChoices(historyChoices).queue();
                 return null;

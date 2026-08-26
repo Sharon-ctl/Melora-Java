@@ -364,7 +364,7 @@ public class PlayerManager {
                                         }
                                         String spotifyUrl = !id.isEmpty() ? "https://open.spotify.com/track/" + id : null;
                                         if (!title.isEmpty() && duration > 0) {
-                                            results.add(new SpotifyMetadata("ytmsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(title), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
+                                            results.add(new SpotifyMetadata("scsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(title), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
                                         }
                                     }
                                 }
@@ -418,7 +418,7 @@ public class PlayerManager {
                                 String cleanTitle = cleanTrackTitle(title);
                                 String cleanArtist = cleanTrackTitle(artist);
                                 String fallbackSpotifyUrl = "https://open.spotify.com/search/" + java.net.URLEncoder.encode(cleanTitle + " " + cleanArtist, java.nio.charset.StandardCharsets.UTF_8);
-                                results.add(new SpotifyMetadata("ytmsearch:" + cleanTitle + " " + cleanArtist, cleanTitle, cleanArtist, artwork, duration, fallbackSpotifyUrl));
+                                results.add(new SpotifyMetadata("scsearch:" + cleanTitle + " " + cleanArtist, cleanTitle, cleanArtist, artwork, duration, fallbackSpotifyUrl));
                             }
                         }
                     }
@@ -467,9 +467,9 @@ public class PlayerManager {
         return null;
     }
 
-    public CompletableFuture<List<AudioTrack>> searchYouTube(String query) {
+    public CompletableFuture<List<AudioTrack>> searchSoundCloud(String query) {
         CompletableFuture<List<AudioTrack>> future = new CompletableFuture<>();
-        String searchQuery = query.startsWith("ytmsearch:") ? query : "ytmsearch:" + query;
+        String searchQuery = query.startsWith("scsearch:") ? query : "scsearch:" + query;
         CompletableFuture.runAsync(() -> {
             try {
                 playerManager.loadItemOrdered(this, searchQuery, new AudioLoadResultHandler() {
@@ -555,7 +555,7 @@ public class PlayerManager {
     }
 
     public void loadSpotifyTrackWithFallback(MusicManager musicManager, SpotifyMetadata meta, com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler handler) {
-        String query = meta.query() != null ? meta.query().replace("ytsearch:", "ytmsearch:") : "ytmsearch:" + cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : "");
+        String query = meta.query() != null ? meta.query().replace("ytsearch:", "scsearch:").replace("ytmsearch:", "scsearch:") : "scsearch:" + cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : "");
         String uri = (meta.spotifyUrl() != null && (meta.spotifyUrl().contains("spotify.com") || meta.spotifyUrl().startsWith("http")))
                 ? meta.spotifyUrl()
                 : "https://open.spotify.com/search/" + java.net.URLEncoder.encode(cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : ""), java.nio.charset.StandardCharsets.UTF_8);
@@ -637,7 +637,7 @@ public class PlayerManager {
                                 art = imgs.get(0).path("url").asText(null);
                             }
                             if (!tTitle.isEmpty() && dur > 0) {
-                                return new SpotifyMetadata("ytmsearch:" + cleanTrackTitle(tTitle) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(tTitle), cleanTrackTitle(artists.toString()), art, dur, url);
+                                return new SpotifyMetadata("scsearch:" + cleanTrackTitle(tTitle) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(tTitle), cleanTrackTitle(artists.toString()), art, dur, url);
                             }
                         }
                     } catch (Exception ignored) {}
@@ -690,7 +690,7 @@ public class PlayerManager {
                 }
 
                 if (!title.isEmpty()) {
-                    return new SpotifyMetadata("ytmsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artist), cleanTrackTitle(title), cleanTrackTitle(artist), artworkUrl, duration, url);
+                    return new SpotifyMetadata("scsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artist), cleanTrackTitle(title), cleanTrackTitle(artist), artworkUrl, duration, url);
                 }
             } catch (Exception e) {
                 logger.error("Failed to fetch Spotify URL: " + url, e);
@@ -876,7 +876,7 @@ public class PlayerManager {
                                             duration = trackData.path("duration_ms").asLong(0);
                                         }
 
-                                        tracks.add(new SpotifyMetadata("ytmsearch:" + cleanTrackTitle(name) + " " + cleanTrackTitle(artistStr.toString()), cleanTrackTitle(name), cleanTrackTitle(artistStr.toString()), artwork, duration, spotifyUrl));
+                                        tracks.add(new SpotifyMetadata("scsearch:" + cleanTrackTitle(name) + " " + cleanTrackTitle(artistStr.toString()), cleanTrackTitle(name), cleanTrackTitle(artistStr.toString()), artwork, duration, spotifyUrl));
                                     } catch (Exception e) {
                                         logger.debug("Spotify: Failed to parse track item", e);
                                     }
@@ -966,7 +966,7 @@ public class PlayerManager {
                                     String spotifyUrl = !trackId.isEmpty() ? "https://open.spotify.com/track/" + trackId : null;
 
                                     long duration = td.path("duration_ms").asLong(0);
-                                    pageTracks.add(new SpotifyMetadata("ytmsearch:" + cleanTrackTitle(trackName) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(trackName), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
+                                    pageTracks.add(new SpotifyMetadata("scsearch:" + cleanTrackTitle(trackName) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(trackName), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
                                 }
                                 if (pageTracks.isEmpty()) break;
                                 tracks.addAll(pageTracks);
@@ -1005,7 +1005,8 @@ public class PlayerManager {
     }
 
     public void loadItemWithFallback(Object orderingKey, String query, AudioLoadResultHandler handler) {
-        if (query.startsWith("ytmsearch:")) {
+        if (query.startsWith("scsearch:")) {
+            // Primary: SoundCloud search
             playerManager.loadItemOrdered(orderingKey, query, new AudioLoadResultHandler() {
                 @Override
                 public void trackLoaded(AudioTrack track) {
@@ -1023,52 +1024,91 @@ public class PlayerManager {
 
                 @Override
                 public void noMatches() {
-                    String fallbackQuery = "ytsearch:" + query.substring("ytmsearch:".length());
-                    playerManager.loadItemOrdered(orderingKey, fallbackQuery, handler);
+                    String rawQuery = query.substring("scsearch:".length()).trim();
+                    // 1. Try Spotify/iTunes metadata to resolve any typos
+                    searchSpotify(rawQuery).thenAccept(spotifyResults -> {
+                        if (spotifyResults != null && !spotifyResults.isEmpty()) {
+                            SpotifyMetadata meta = spotifyResults.get(0);
+                            String correctedScQuery = "scsearch:" + cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : "");
+                            if (!correctedScQuery.equalsIgnoreCase(query)) {
+                                playerManager.loadItemOrdered(orderingKey, correctedScQuery, new AudioLoadResultHandler() {
+                                    @Override
+                                    public void trackLoaded(AudioTrack track) {
+                                        handler.trackLoaded(track);
+                                    }
+                                    @Override
+                                    public void playlistLoaded(AudioPlaylist playlist) {
+                                        if (playlist.getTracks().isEmpty()) {
+                                            noMatches();
+                                        } else {
+                                            handler.playlistLoaded(playlist);
+                                        }
+                                    }
+                                    @Override
+                                    public void noMatches() {
+                                        tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
+                                    }
+                                    @Override
+                                    public void loadFailed(FriendlyException exception) {
+                                        tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
+                                    }
+                                });
+                                return;
+                            }
+                        }
+                        // 2. Try relaxing the query on SoundCloud
+                        tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
+                    }).exceptionally(ex -> {
+                        tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
+                        return null;
+                    });
                 }
 
                 @Override
                 public void loadFailed(FriendlyException exception) {
-                    String fallbackQuery = "ytsearch:" + query.substring("ytmsearch:".length());
-                    playerManager.loadItemOrdered(orderingKey, fallbackQuery, handler);
-                }
-            });
-        } else if (query.startsWith("ytsearch:")) {
-            playerManager.loadItemOrdered(orderingKey, query, new AudioLoadResultHandler() {
-                @Override
-                public void trackLoaded(AudioTrack track) {
-                    handler.trackLoaded(track);
-                }
-
-                @Override
-                public void playlistLoaded(AudioPlaylist playlist) {
-                    if (playlist.getTracks().isEmpty()) {
-                        noMatches();
-                    } else {
-                        handler.playlistLoaded(playlist);
-                    }
-                }
-
-                @Override
-                public void noMatches() {
-                    String fallbackQuery = "ytmsearch:" + query.substring("ytsearch:".length());
-                    playerManager.loadItemOrdered(orderingKey, fallbackQuery, handler);
-                }
-
-                @Override
-                public void loadFailed(FriendlyException exception) {
-                    String fallbackQuery = "ytmsearch:" + query.substring("ytsearch:".length());
-                    playerManager.loadItemOrdered(orderingKey, fallbackQuery, handler);
+                    String rawQuery = query.substring("scsearch:".length()).trim();
+                    tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
                 }
             });
         } else {
-            boolean isDirectUrl = query.startsWith("http://") || query.startsWith("https://") || query.contains("://") || query.startsWith("scsearch:") || query.startsWith("ytsearch:") || query.startsWith("ytmsearch:");
-            String targetQuery = isDirectUrl ? query : "ytmsearch:" + query;
+            boolean isDirectUrl = query.startsWith("http://") || query.startsWith("https://") || query.contains("://") || query.startsWith("scsearch:");
+            String targetQuery = isDirectUrl ? query : "scsearch:" + query;
             if (!isDirectUrl) {
                 loadItemWithFallback(orderingKey, targetQuery, handler);
             } else {
                 playerManager.loadItemOrdered(orderingKey, query, handler);
             }
+        }
+    }
+
+    private void tryRelaxedSoundCloudSearch(Object orderingKey, String rawQuery, AudioLoadResultHandler handler) {
+        String[] words = rawQuery.split("\\s+");
+        if (words.length > 2) {
+            String relaxedQuery = "scsearch:" + words[0] + " " + words[1];
+            playerManager.loadItemOrdered(orderingKey, relaxedQuery, new AudioLoadResultHandler() {
+                @Override
+                public void trackLoaded(AudioTrack track) {
+                    handler.trackLoaded(track);
+                }
+                @Override
+                public void playlistLoaded(AudioPlaylist playlist) {
+                    if (playlist.getTracks().isEmpty()) {
+                        handler.noMatches();
+                    } else {
+                        handler.playlistLoaded(playlist);
+                    }
+                }
+                @Override
+                public void noMatches() {
+                    handler.noMatches();
+                }
+                @Override
+                public void loadFailed(FriendlyException exception) {
+                    handler.loadFailed(exception);
+                }
+            });
+        } else {
+            handler.noMatches();
         }
     }
 
@@ -1109,9 +1149,9 @@ public class PlayerManager {
                 });
             }
         } else {
-            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:") || trackUrl.startsWith("ytsearch:") || trackUrl.startsWith("ytmsearch:");
+            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:");
             if (!isDirectUrl) {
-                loadItemWithFallback(musicManager, "ytmsearch:" + trackUrl, handler);
+                loadItemWithFallback(musicManager, "scsearch:" + trackUrl, handler);
             } else {
                 loadItemWithFallback(musicManager, trackUrl, handler);
             }
@@ -1205,9 +1245,50 @@ public class PlayerManager {
                 });
             }
         } else {
-            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:") || trackUrl.startsWith("ytsearch:") || trackUrl.startsWith("ytmsearch:");
+            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:");
             if (!isDirectUrl) {
-                executeLoadAndPlay(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                searchSpotify(trackUrl).thenAccept(spotifyResults -> {
+                    if (spotifyResults != null && !spotifyResults.isEmpty()) {
+                        SpotifyMetadata meta = spotifyResults.get(0);
+                        loadSpotifyTrackWithFallback(musicManager, meta, new AudioLoadResultHandler() {
+                            @Override
+                            public void trackLoaded(AudioTrack track) {
+                                track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
+                                musicManager.getScheduler().queue(track);
+                                musicManager.updateNowPlayingMessage();
+                                String displayTitle = escapeMarkdown(track.getInfo().title);
+                                String displayDuration = formatTime(track.getDuration());
+                                sendHookMessage(event,
+                                        EmbedHelper.MSG_SUCCESS + " Queued **" + displayTitle + "** • `" + displayDuration + "`")
+                                        .queue();
+                            }
+
+                            @Override
+                            public void playlistLoaded(AudioPlaylist playlist) {
+                                if (!playlist.getTracks().isEmpty()) {
+                                    trackLoaded(playlist.getTracks().get(0));
+                                } else {
+                                    noMatches();
+                                }
+                            }
+
+                            @Override
+                            public void noMatches() {
+                                executeLoadAndPlay(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                            }
+
+                            @Override
+                            public void loadFailed(FriendlyException exception) {
+                                executeLoadAndPlay(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                            }
+                        });
+                    } else {
+                        executeLoadAndPlay(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                    }
+                }).exceptionally(ex -> {
+                    executeLoadAndPlay(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                    return null;
+                });
             } else {
                 executeLoadAndPlay(event, trackUrl, forcedArtworkUrl, musicManager);
             }
@@ -1348,25 +1429,25 @@ public class PlayerManager {
                         }
                         @Override
                         public void noMatches() {
-                            executeLoadAndPlayInstant(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                            executeLoadAndPlayInstant(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                         }
                         @Override
                         public void loadFailed(FriendlyException exception) {
-                            executeLoadAndPlayInstant(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                            executeLoadAndPlayInstant(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                         }
                     });
                 } else {
                     executeLoadAndPlayInstant(event, trackUrl, forcedArtworkUrl, musicManager);
                 }
             }).exceptionally(ex -> {
-                logger.warn("searchSpotify failed for instant play command: {}, falling back to ytsearch", trackUrl, ex);
-                executeLoadAndPlayInstant(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                logger.warn("searchSpotify failed for instant play command: {}, falling back to scsearch", trackUrl, ex);
+                executeLoadAndPlayInstant(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                 return null;
             });
         } else {
-            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:") || trackUrl.startsWith("ytsearch:") || trackUrl.startsWith("ytmsearch:");
+            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:");
             if (!isDirectUrl) {
-                executeLoadAndPlayInstant(event, "ytmsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                executeLoadAndPlayInstant(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
             } else {
                 executeLoadAndPlayInstant(event, trackUrl, forcedArtworkUrl, musicManager);
             }
@@ -1496,9 +1577,46 @@ public class PlayerManager {
                 }
             });
         } else {
-            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:") || trackUrl.startsWith("ytsearch:") || trackUrl.startsWith("ytmsearch:");
+            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:");
             if (!isDirectUrl) {
-                executeLoadAndInsert(event, "ytmsearch:" + trackUrl, position, musicManager);
+                searchSpotify(trackUrl).thenAccept(spotifyResults -> {
+                    if (spotifyResults != null && !spotifyResults.isEmpty()) {
+                        SpotifyMetadata meta = spotifyResults.get(0);
+                        loadSpotifyTrackWithFallback(musicManager, meta, new AudioLoadResultHandler() {
+                            @Override
+                            public void trackLoaded(AudioTrack track) {
+                                track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");
+                                musicManager.getScheduler().insert(track, position);
+                                String displayTitle = escapeMarkdown(track.getInfo().title);
+                                sendHookMessage(event, EmbedHelper.MSG_SUCCESS + " Inserted **" + displayTitle + "** • Position: `" + position + "`").queue();
+                            }
+
+                            @Override
+                            public void playlistLoaded(AudioPlaylist playlist) {
+                                if (!playlist.getTracks().isEmpty()) {
+                                    trackLoaded(playlist.getTracks().get(0));
+                                } else {
+                                    noMatches();
+                                }
+                            }
+
+                            @Override
+                            public void noMatches() {
+                                executeLoadAndInsert(event, "scsearch:" + trackUrl, position, musicManager);
+                            }
+
+                            @Override
+                            public void loadFailed(FriendlyException exception) {
+                                executeLoadAndInsert(event, "scsearch:" + trackUrl, position, musicManager);
+                            }
+                        });
+                    } else {
+                        executeLoadAndInsert(event, "scsearch:" + trackUrl, position, musicManager);
+                    }
+                }).exceptionally(ex -> {
+                    executeLoadAndInsert(event, "scsearch:" + trackUrl, position, musicManager);
+                    return null;
+                });
             } else {
                 executeLoadAndInsert(event, trackUrl, position, musicManager);
             }
@@ -1592,7 +1710,7 @@ public class PlayerManager {
                     String query = parts[1];
                     String art = parts[2].equals("null") ? null : parts[2];
                     com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo info = new com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo(
-                            cleanTrackTitle(query.replace("ytsearch:", "").replace("ytmsearch:", "")), "Spotify", 0, "spotify", true, query);
+                            cleanTrackTitle(query.replace("ytsearch:", "").replace("ytmsearch:", "").replace("scsearch:", "")), "Spotify", 0, "spotify", true, query);
                     return new DeferredTrack(info, query, art);
                 }
             }

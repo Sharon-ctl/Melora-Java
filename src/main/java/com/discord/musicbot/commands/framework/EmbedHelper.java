@@ -164,9 +164,10 @@ public class EmbedHelper {
             if (url == null) {
                 url = "https://open.spotify.com/search/"
                         + java.net.URLEncoder.encode(trackTitle, java.nio.charset.StandardCharsets.UTF_8);
-            } else if (url.startsWith("ytsearch:") || url.startsWith("ytmsearch:")) {
+            } else if (url.startsWith("ytsearch:") || url.startsWith("ytmsearch:") || url.startsWith("scsearch:")) {
                 String raw = url.startsWith("ytmsearch:") ? url.substring("ytmsearch:".length())
-                        : url.substring("ytsearch:".length());
+                        : (url.startsWith("scsearch:") ? url.substring("scsearch:".length())
+                        : url.substring("ytsearch:".length()));
                 url = "https://open.spotify.com/search/"
                         + java.net.URLEncoder.encode(com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(raw),
                                 java.nio.charset.StandardCharsets.UTF_8);
@@ -804,10 +805,11 @@ public class EmbedHelper {
                     title = title.substring(0, 47) + "...";
 
                 String url = t.uri;
-                if (url == null || url.startsWith("ytsearch:") || url.startsWith("ytmsearch:")) {
+                if (url == null || url.startsWith("ytsearch:") || url.startsWith("ytmsearch:") || url.startsWith("scsearch:")) {
                     String raw = url != null && url.startsWith("ytmsearch:") ? url.substring("ytmsearch:".length())
                             : (url != null && url.startsWith("ytsearch:") ? url.substring("ytsearch:".length())
-                                    : title);
+                                    : (url != null && url.startsWith("scsearch:") ? url.substring("scsearch:".length())
+                                    : title));
                     url = "https://open.spotify.com/search/"
                             + java.net.URLEncoder.encode(com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(raw),
                                     java.nio.charset.StandardCharsets.UTF_8);

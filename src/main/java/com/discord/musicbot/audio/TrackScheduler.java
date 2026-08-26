@@ -181,7 +181,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
         if (lastRequesterId != null) {
             String uri = track.getInfo().uri;
-            String historyQuery = (track instanceof SpotifyResolvedTrack || (uri != null && (uri.contains("spotify.com") || uri.contains("youtube.com") || uri.contains("youtu.be") || uri.startsWith("ytmsearch:") || uri.startsWith("ytsearch:"))))
+            String historyQuery = (track instanceof SpotifyResolvedTrack || (uri != null && (uri.contains("spotify.com") || uri.contains("youtube.com") || uri.contains("youtu.be") || uri.contains("soundcloud.com") || uri.startsWith("scsearch:") || uri.startsWith("ytmsearch:") || uri.startsWith("ytsearch:"))))
                     ? cleanTitle + " " + cleanAuthor
                     : uri;
             com.discord.musicbot.data.HistoryManager.getInstance().addEntry(
@@ -548,20 +548,20 @@ public class TrackScheduler extends AudioEventAdapter {
         logger.info("[AutoPlay] Reference: \"{}\" by {}", cleanTitle, artist);
 
         String[] searchQueries = {
-                "ytmsearch:" + artist + " official audio",
-                "ytmsearch:" + artist + " official music video",
-                "ytmsearch:" + artist + " top songs",
-                "ytmsearch:" + artist + " best songs",
-                "ytmsearch:" + artist + " popular songs",
-                "ytmsearch:" + artist + " greatest hits songs",
-                "ytmsearch:" + artist + " latest songs official",
-                "ytmsearch:songs like " + cleanTitle + " " + artist,
-                "ytmsearch:similar songs to " + cleanTitle,
-                "ytmsearch:" + artist + " full song",
-                "ytmsearch:" + artist + " music video",
-                "ytmsearch:songs similar to " + artist,
-                "ytmsearch:music like " + cleanTitle + " song",
-                "ytmsearch:" + artist + " audio"
+                "scsearch:" + artist + " official audio",
+                "scsearch:" + artist + " official music video",
+                "scsearch:" + artist + " top songs",
+                "scsearch:" + artist + " best songs",
+                "scsearch:" + artist + " popular songs",
+                "scsearch:" + artist + " greatest hits songs",
+                "scsearch:" + artist + " latest songs official",
+                "scsearch:songs like " + cleanTitle + " " + artist,
+                "scsearch:similar songs to " + cleanTitle,
+                "scsearch:" + artist + " full song",
+                "scsearch:" + artist + " music video",
+                "scsearch:songs similar to " + artist,
+                "scsearch:music like " + cleanTitle + " song",
+                "scsearch:" + artist + " audio"
         };
 
         for (String query : searchQueries) {
@@ -610,7 +610,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
         try {
             logger.info("[AutoPlay] Trying final fallback...");
-            List<AudioTrack> fallback = loadTracks("ytmsearch:" + artist + " song official audio");
+            List<AudioTrack> fallback = loadTracks("scsearch:" + artist + " song official audio");
             if (fallback != null) {
                 AudioTrack valid = fallback.stream()
                         .filter(t -> isValidAutoPlayTrack(t, referenceTrack))
@@ -636,16 +636,16 @@ public class TrackScheduler extends AudioEventAdapter {
         logger.info("[RandomPlay] Reference: \"{}\" by {}", cleanTitle, artist);
 
         String[] searchQueries = {
-                "ytmsearch:" + artist + " similar artists genre songs",
-                "ytmsearch:songs in the same style language as " + cleanTitle + " " + artist,
-                "ytmsearch:best music genre like " + artist,
-                "ytmsearch:similar genre playlist to " + cleanTitle,
-                "ytmsearch:recommended songs like " + artist + " " + cleanTitle,
-                "ytmsearch:" + artist + " radio mix official audio",
-                "ytmsearch:popular genre songs like " + cleanTitle,
-                "ytmsearch:more songs like " + artist,
-                "ytmsearch:music similar to " + cleanTitle + " official audio",
-                "ytmsearch:genre language songs like " + artist + " top tracks"
+                "scsearch:" + artist + " similar artists genre songs",
+                "scsearch:songs in the same style language as " + cleanTitle + " " + artist,
+                "scsearch:best music genre like " + artist,
+                "scsearch:similar genre playlist to " + cleanTitle,
+                "scsearch:recommended songs like " + artist + " " + cleanTitle,
+                "scsearch:" + artist + " radio mix official audio",
+                "scsearch:popular genre songs like " + cleanTitle,
+                "scsearch:more songs like " + artist,
+                "scsearch:music similar to " + cleanTitle + " official audio",
+                "scsearch:genre language songs like " + artist + " top tracks"
         };
 
         for (String query : searchQueries) {
@@ -688,7 +688,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
         try {
             logger.info("[RandomPlay] Trying final fallback...");
-            List<AudioTrack> fallback = loadTracks("ytmsearch:" + artist + " song official audio");
+            List<AudioTrack> fallback = loadTracks("scsearch:" + artist + " song official audio");
             if (fallback != null) {
                 List<AudioTrack> validList = fallback.stream()
                         .filter(t -> isValidAutoPlayTrack(t, referenceTrack))

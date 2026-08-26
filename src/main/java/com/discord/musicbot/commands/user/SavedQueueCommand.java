@@ -49,7 +49,7 @@ public class SavedQueueCommand extends SlashCommand {
                             cleanAuthor,
                             t.getDuration(),
                             t.getInfo().uri,
-                            t.getInfo().uri != null ? t.getInfo().uri : "ytmsearch:" + cleanTitle + " " + cleanAuthor,
+                            t.getInfo().uri != null ? t.getInfo().uri : "scsearch:" + cleanTitle + " " + cleanAuthor,
                             null
                     ));
                 }

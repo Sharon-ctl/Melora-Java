@@ -205,7 +205,7 @@ public class QueueCommand extends SlashCommand {
                 for (PlaylistTrack pt : tracks) {
                     String cleanTitle = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(pt.getTitle());
                     String cleanAuthor = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(pt.getAuthor());
-                    com.discord.musicbot.audio.PlayerManager.getInstance().loadItemWithFallback(ctx.getGuild(), pt.getUri() != null ? pt.getUri() : "ytmsearch:" + cleanAuthor + " " + cleanTitle, new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
+                    com.discord.musicbot.audio.PlayerManager.getInstance().loadItemWithFallback(ctx.getGuild(), pt.getUri() != null ? pt.getUri() : "scsearch:" + cleanAuthor + " " + cleanTitle, new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
                         @Override
                         public void trackLoaded(AudioTrack track) {
                             track.setUserData("{\"requester\":\"" + requesterId + "\"}");
