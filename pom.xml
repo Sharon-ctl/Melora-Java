@@ -9,7 +9,7 @@
     <version>2.0.34</version>
     <packaging>jar</packaging>
 
-    <name>Discord Music Bot</name>
+    <name>Melora Music Bot</name>
     <description>Production-ready Discord music bot</description>
 
     <properties>
@@ -124,7 +124,7 @@
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
-            <version>1.22.2</version>
+            <version>1.23.1</version>
         </dependency>
     </dependencies>
 
