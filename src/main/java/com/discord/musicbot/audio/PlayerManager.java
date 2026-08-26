@@ -60,14 +60,14 @@ public class PlayerManager {
         playerManager.setFrameBufferDuration(1000);
 
         // --- Register YouTube Source (v2) with all available resilient clients ---
+        // NOTE: Android and Ios clients removed — both are broken and return HTTP 400.
+        // Music (WEB_REMIX) is prioritized first as it works best with OAuth2.
         YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(true,
+                new dev.lavalink.youtube.clients.Music(),
+                new dev.lavalink.youtube.clients.Web(),
+                new dev.lavalink.youtube.clients.MWeb(),
                 new dev.lavalink.youtube.clients.Tv(),
                 new dev.lavalink.youtube.clients.AndroidVr(),
-                new dev.lavalink.youtube.clients.Music(),
-                new dev.lavalink.youtube.clients.Ios(),
-                new dev.lavalink.youtube.clients.Android(),
-                new dev.lavalink.youtube.clients.MWeb(),
-                new dev.lavalink.youtube.clients.Web(),
                 new dev.lavalink.youtube.clients.AndroidMusic(),
                 new dev.lavalink.youtube.clients.TvHtml5Simply(),
                 new dev.lavalink.youtube.clients.WebEmbedded());
