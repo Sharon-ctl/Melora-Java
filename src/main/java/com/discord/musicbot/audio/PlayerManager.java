@@ -63,14 +63,7 @@ public class PlayerManager {
         // NOTE: Android and Ios clients removed — both are broken and return HTTP 400.
         // Music (WEB_REMIX) is prioritized first as it works best with OAuth2.
         YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(true,
-                new dev.lavalink.youtube.clients.Music(),
-                new dev.lavalink.youtube.clients.Web(),
-                new dev.lavalink.youtube.clients.MWeb(),
-                new dev.lavalink.youtube.clients.Tv(),
-                new dev.lavalink.youtube.clients.AndroidVr(),
-                new dev.lavalink.youtube.clients.AndroidMusic(),
-                new dev.lavalink.youtube.clients.TvHtml5Simply(),
-                new dev.lavalink.youtube.clients.WebEmbedded());
+                new dev.lavalink.youtube.clients.Music());
         
         try {
             io.github.cdimascio.dotenv.Dotenv dotenv = io.github.cdimascio.dotenv.Dotenv.load();
@@ -85,13 +78,45 @@ public class PlayerManager {
                 youtube.useOauth2(null, false);
             }
 
+            String poTokenApi = dotenv.get("YOUTUBE_PO_TOKEN_API");
             String poToken = dotenv.get("YOUTUBE_PO_TOKEN");
             String visitorData = dotenv.get("YOUTUBE_VISITOR_DATA");
+            
+            if (poTokenApi != null && !poTokenApi.isEmpty()) {
+                logger.info("Fetching PO Token automatically from remote API: {}", poTokenApi);
+                try {
+                    java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                            .uri(java.net.URI.create(poTokenApi))
+                            .header("User-Agent", "Mozilla/5.0")
+                            .timeout(java.time.Duration.ofSeconds(5))
+                            .GET()
+                            .build();
+                    java.net.http.HttpResponse<String> response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+                    
+                    if (response.statusCode() == 200) {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(response.body());
+                        if (root.has("poToken") && root.has("visitorData")) {
+                            poToken = root.path("poToken").asText();
+                            visitorData = root.path("visitorData").asText();
+                            logger.info("Successfully fetched PO Token and Visitor Data from API!");
+                        } else {
+                            logger.warn("PO Token API responded but missing expected fields (poToken, visitorData).");
+                        }
+                    } else {
+                        logger.warn("PO Token API responded with status {}", response.statusCode());
+                    }
+                } catch (Exception apiEx) {
+                    logger.error("Failed to fetch PO Token from remote API", apiEx);
+                }
+            }
+
             if (poToken != null && !poToken.isEmpty() && visitorData != null && !visitorData.isEmpty()) {
                 dev.lavalink.youtube.clients.Web.setPoTokenAndVisitorData(poToken, visitorData);
+                dev.lavalink.youtube.clients.WebEmbedded.setPoTokenAndVisitorData(poToken, visitorData);
                 logger.info("YouTube PO Token and Visitor Data injected successfully. Bypassing age restrictions!");
             } else {
-                logger.info("No PO Token provided. Age-restricted and kid-focused videos may fail.");
+                logger.warn("No PO Token provided or fetched. Age-restricted videos and bot checks will fail.");
             }
 
             String ipv6Block = dotenv.get("IPV6_BLOCK");
