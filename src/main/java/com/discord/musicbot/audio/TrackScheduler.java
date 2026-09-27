@@ -27,6 +27,18 @@ public class TrackScheduler extends AudioEventAdapter {
     private static final int MAX_HISTORY = 50;
     private static final int MAX_QUEUE_SIZE = 2000;
 
+    private static final java.util.regex.Pattern NORM_OFFICIAL_PAREN = java.util.regex.Pattern.compile("\\(.*?official.*?\\)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern NORM_OFFICIAL_BRACKET = java.util.regex.Pattern.compile("\\[.*?official.*?\\]", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern NORM_LYRIC_PAREN = java.util.regex.Pattern.compile("\\(.*?lyric.*?\\)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern NORM_LYRIC_BRACKET = java.util.regex.Pattern.compile("\\[.*?lyric.*?\\]", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern NORM_AUDIO_PAREN = java.util.regex.Pattern.compile("\\(.*?audio.*?\\)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern NORM_VIDEO_PAREN = java.util.regex.Pattern.compile("\\(.*?video.*?\\)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern NORM_FEAT = java.util.regex.Pattern.compile("ft\\.?|feat\\.?|featuring", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern NORM_OTHER_PAREN = java.util.regex.Pattern.compile("\\(.*?\\)");
+    private static final java.util.regex.Pattern NORM_OTHER_BRACKET = java.util.regex.Pattern.compile("\\[.*?\\]");
+    private static final java.util.regex.Pattern NORM_DASH_PIPE = java.util.regex.Pattern.compile("[-|]");
+    private static final java.util.regex.Pattern NORM_WHITESPACE = java.util.regex.Pattern.compile("\\s+");
+
     public enum LoopMode {
         OFF, TRACK, QUEUE
     }
@@ -341,7 +353,9 @@ public class TrackScheduler extends AudioEventAdapter {
         secondaryPlayer.stopTrack();
 
         if (loopMode == LoopMode.TRACK && currentTrack != null) {
-            getActivePlayer().startTrack(currentTrack.makeClone(), false);
+            AudioTrack clone = currentTrack.makeClone();
+            currentTrack = clone;
+            getActivePlayer().startTrack(clone, false);
             return;
         }
 
@@ -548,20 +562,20 @@ public class TrackScheduler extends AudioEventAdapter {
         logger.info("[AutoPlay] Reference: \"{}\" by {}", cleanTitle, artist);
 
         String[] searchQueries = {
-                "scsearch:" + artist + " official audio",
-                "scsearch:" + artist + " official music video",
-                "scsearch:" + artist + " top songs",
-                "scsearch:" + artist + " best songs",
-                "scsearch:" + artist + " popular songs",
-                "scsearch:" + artist + " greatest hits songs",
-                "scsearch:" + artist + " latest songs official",
-                "scsearch:songs like " + cleanTitle + " " + artist,
-                "scsearch:similar songs to " + cleanTitle,
-                "scsearch:" + artist + " full song",
-                "scsearch:" + artist + " music video",
-                "scsearch:songs similar to " + artist,
-                "scsearch:music like " + cleanTitle + " song",
-                "scsearch:" + artist + " audio"
+                "ytsearch:" + artist + " official audio",
+                "ytsearch:" + artist + " official music video",
+                "ytsearch:" + artist + " top songs",
+                "ytsearch:" + artist + " best songs",
+                "ytsearch:" + artist + " popular songs",
+                "ytsearch:" + artist + " greatest hits songs",
+                "ytsearch:" + artist + " latest songs official",
+                "ytsearch:songs like " + cleanTitle + " " + artist,
+                "ytsearch:similar songs to " + cleanTitle,
+                "ytsearch:" + artist + " full song",
+                "ytsearch:" + artist + " music video",
+                "ytsearch:songs similar to " + artist,
+                "ytsearch:music like " + cleanTitle + " song",
+                "ytsearch:" + artist + " audio"
         };
 
         for (String query : searchQueries) {
@@ -610,7 +624,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
         try {
             logger.info("[AutoPlay] Trying final fallback...");
-            List<AudioTrack> fallback = loadTracks("scsearch:" + artist + " song official audio");
+            List<AudioTrack> fallback = loadTracks("ytsearch:" + artist + " song official audio");
             if (fallback != null) {
                 AudioTrack valid = fallback.stream()
                         .filter(t -> isValidAutoPlayTrack(t, referenceTrack))
@@ -636,16 +650,16 @@ public class TrackScheduler extends AudioEventAdapter {
         logger.info("[RandomPlay] Reference: \"{}\" by {}", cleanTitle, artist);
 
         String[] searchQueries = {
-                "scsearch:" + artist + " similar artists genre songs",
-                "scsearch:songs in the same style language as " + cleanTitle + " " + artist,
-                "scsearch:best music genre like " + artist,
-                "scsearch:similar genre playlist to " + cleanTitle,
-                "scsearch:recommended songs like " + artist + " " + cleanTitle,
-                "scsearch:" + artist + " radio mix official audio",
-                "scsearch:popular genre songs like " + cleanTitle,
-                "scsearch:more songs like " + artist,
-                "scsearch:music similar to " + cleanTitle + " official audio",
-                "scsearch:genre language songs like " + artist + " top tracks"
+                "ytsearch:" + artist + " similar artists genre songs",
+                "ytsearch:songs in the same style language as " + cleanTitle + " " + artist,
+                "ytsearch:best music genre like " + artist,
+                "ytsearch:similar genre playlist to " + cleanTitle,
+                "ytsearch:recommended songs like " + artist + " " + cleanTitle,
+                "ytsearch:" + artist + " radio mix official audio",
+                "ytsearch:popular genre songs like " + cleanTitle,
+                "ytsearch:more songs like " + artist,
+                "ytsearch:music similar to " + cleanTitle + " official audio",
+                "ytsearch:genre language songs like " + artist + " top tracks"
         };
 
         for (String query : searchQueries) {
@@ -688,7 +702,7 @@ public class TrackScheduler extends AudioEventAdapter {
 
         try {
             logger.info("[RandomPlay] Trying final fallback...");
-            List<AudioTrack> fallback = loadTracks("scsearch:" + artist + " song official audio");
+            List<AudioTrack> fallback = loadTracks("ytsearch:" + artist + " song official audio");
             if (fallback != null) {
                 List<AudioTrack> validList = fallback.stream()
                         .filter(t -> isValidAutoPlayTrack(t, referenceTrack))
@@ -881,29 +895,28 @@ public class TrackScheduler extends AudioEventAdapter {
 
         return score;
     }
-
     private boolean isSameArtist(AudioTrack track, String artist) {
         String t = track.getInfo().author.toLowerCase();
         String a = artist.toLowerCase();
         if (t.equals(a)) return true;
-        return t.matches(".*\\b" + java.util.regex.Pattern.quote(a) + "\\b.*") || 
-               a.matches(".*\\b" + java.util.regex.Pattern.quote(t) + "\\b.*");
+        return t.contains(a) || a.contains(t);
     }
 
     private String normalizeTitle(String title) {
-        return title.toLowerCase()
-                .replaceAll("\\(.*?official.*?\\)", "")
-                .replaceAll("\\[.*?official.*?\\]", "")
-                .replaceAll("\\(.*?lyric.*?\\)", "")
-                .replaceAll("\\[.*?lyric.*?\\]", "")
-                .replaceAll("\\(.*?audio.*?\\)", "")
-                .replaceAll("\\(.*?video.*?\\)", "")
-                .replaceAll("ft\\.?|feat\\.?|featuring", "")
-                .replaceAll("\\(.*?\\)", "")
-                .replaceAll("\\[.*?\\]", "")
-                .replaceAll("[-|]", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
+        if (title == null) return "";
+        String s = title.toLowerCase();
+        s = NORM_OFFICIAL_PAREN.matcher(s).replaceAll("");
+        s = NORM_OFFICIAL_BRACKET.matcher(s).replaceAll("");
+        s = NORM_LYRIC_PAREN.matcher(s).replaceAll("");
+        s = NORM_LYRIC_BRACKET.matcher(s).replaceAll("");
+        s = NORM_AUDIO_PAREN.matcher(s).replaceAll("");
+        s = NORM_VIDEO_PAREN.matcher(s).replaceAll("");
+        s = NORM_FEAT.matcher(s).replaceAll("");
+        s = NORM_OTHER_PAREN.matcher(s).replaceAll("");
+        s = NORM_OTHER_BRACKET.matcher(s).replaceAll("");
+        s = NORM_DASH_PIPE.matcher(s).replaceAll(" ");
+        s = NORM_WHITESPACE.matcher(s).replaceAll(" ");
+        return s.trim();
     }
 
     public boolean previousTrack() {
@@ -1296,9 +1309,15 @@ public class TrackScheduler extends AudioEventAdapter {
         if (trackStartTimeMs > 0) {
             long durationPlayed = System.currentTimeMillis() - trackStartTimeMs;
             if (durationPlayed >= 30000 || durationPlayed >= (track.getDuration() * 0.4)) {
-                String uId = lastRequesterId != null ? lastRequesterId : "Unknown";
-                com.discord.musicbot.data.StatsManager.getInstance().addListeningData(
-                        uId, track.getInfo().title, track.getInfo().author, durationPlayed);
+                String uId = lastRequesterId != null ? lastRequesterId : null;
+                if (uId != null && !uId.equals("Unknown") && uId.matches("\\d+")) {
+                    try {
+                        com.discord.musicbot.data.StatsManager.getInstance().addListeningData(
+                                uId, track.getInfo().title, track.getInfo().author, durationPlayed);
+                    } catch (Exception e) {
+                        logger.warn("Failed to record listening stats: {}", e.getMessage());
+                    }
+                }
             }
         }
         trackStartTimeMs = 0;

@@ -101,12 +101,49 @@ public class MusicManager {
         return karaokeMode;
     }
 
+    public synchronized void startKaraokeTask() {
+        if (karaokeTask != null && !karaokeTask.isDone()) {
+            return;
+        }
+        this.karaokeTask = PlayerManager.scheduledExecutor.scheduleAtFixedRate(() -> {
+            try {
+                if (!karaokeMode || scheduler.isPaused())
+                    return;
+                AudioTrack current = player.getPlayingTrack();
+                if (current == null)
+                    return;
+
+                if (liveLyricsChannelId != -1 && (karaokeLines == null || karaokeLines.isEmpty()) && !fetchingLyrics
+                        && lastActiveLineIndex == -2) {
+                    net.dv8tion.jda.api.entities.channel.middleman.MessageChannel ch = guild.getJDA()
+                            .getTextChannelById(liveLyricsChannelId);
+                    if (ch != null) {
+                        ensureLyricsFetchedAndDisplay(current, ch);
+                    }
+                } else if (liveLyricsChannelId != -1 && karaokeLines != null && !karaokeLines.isEmpty()) {
+                    sendOrUpdateLiveLyricsContainer(current, karaokeLines, null, false);
+                }
+            } catch (Exception e) {
+                logger.error("Error in karaoke task", e);
+            }
+        }, 300, 300, TimeUnit.MILLISECONDS);
+    }
+
+    public synchronized void stopKaraokeTask() {
+        if (karaokeTask != null) {
+            karaokeTask.cancel(true);
+            karaokeTask = null;
+        }
+    }
+
     public void setKaraokeMode(boolean karaokeMode) {
         this.karaokeMode = karaokeMode;
         if (!karaokeMode) {
+            stopKaraokeTask();
             cleanupLiveLyricsContainer();
             resetKaraokeTrack();
         } else {
+            startKaraokeTask();
             AudioTrack current = player.getPlayingTrack();
             if (current != null) {
                 ensureLyricsFetchedAndDisplay(current, null);
@@ -289,6 +326,7 @@ public class MusicManager {
 
     public void enableInstantKaraoke(net.dv8tion.jda.api.entities.channel.middleman.MessageChannel channel) {
         this.karaokeMode = true;
+        startKaraokeTask();
         if (channel != null) {
             this.liveLyricsChannelId = channel.getIdLong();
         }
@@ -359,30 +397,6 @@ public class MusicManager {
                 logger.error("Error in watchdog task", e);
             }
         }, 5, 5, TimeUnit.SECONDS);
-
-        // Start Karaoke / Live Lyrics Ticker (300ms for instant real-time highlighting)
-        this.karaokeTask = PlayerManager.scheduledExecutor.scheduleAtFixedRate(() -> {
-            try {
-                if (!karaokeMode || scheduler.isPaused())
-                    return;
-                AudioTrack current = player.getPlayingTrack();
-                if (current == null)
-                    return;
-
-                if (liveLyricsChannelId != -1 && (karaokeLines == null || karaokeLines.isEmpty()) && !fetchingLyrics
-                        && lastActiveLineIndex == -2) {
-                    net.dv8tion.jda.api.entities.channel.middleman.MessageChannel ch = guild.getJDA()
-                            .getTextChannelById(liveLyricsChannelId);
-                    if (ch != null) {
-                        ensureLyricsFetchedAndDisplay(current, ch);
-                    }
-                } else if (liveLyricsChannelId != -1 && karaokeLines != null && !karaokeLines.isEmpty()) {
-                    sendOrUpdateLiveLyricsContainer(current, karaokeLines, null, false);
-                }
-            } catch (Exception e) {
-                logger.error("Error in karaoke task", e);
-            }
-        }, 300, 300, TimeUnit.MILLISECONDS);
 
         logger.debug("MusicManager created for guild: {}", guild.getName());
     }
@@ -495,9 +509,9 @@ public class MusicManager {
             aloneTask.cancel(true);
         if (watchdogTask != null)
             watchdogTask.cancel(true);
-        if (karaokeTask != null)
-            karaokeTask.cancel(true);
+        stopKaraokeTask();
         player.destroy();
+        secondaryPlayer.destroy();
     }
 
     private volatile String nowPlayingChannelId;
@@ -586,7 +600,8 @@ public class MusicManager {
             return track.getInfo().artworkUrl;
         }
 
-        if (track.getInfo().uri.contains("youtube")) {
+        String uri = track.getInfo().uri;
+        if (uri != null && (uri.contains("youtube") || uri.contains("youtu.be"))) {
             return "https://img.youtube.com/vi/" + track.getInfo().identifier + "/mqdefault.jpg";
         }
         return "https://media.discordapp.net/attachments/12300000/12300000/icon.png";
@@ -1094,6 +1109,7 @@ public class MusicManager {
                 }
                 guild.getAudioManager().setSelfDeafened(true);
                 guild.getAudioManager().openAudioConnection(vc);
+                this.isDeliberateDisconnect = false;
             }
         }
 
@@ -1195,14 +1211,14 @@ public class MusicManager {
             aloneTask.cancel(true);
         if (watchdogTask != null)
             watchdogTask.cancel(true);
-        if (karaokeTask != null)
-            karaokeTask.cancel(true);
+        stopKaraokeTask();
 
         try {
             deleteNowPlayingMessage(true); // Blocking delete
         } catch (Exception ignored) {
         }
         player.destroy();
+        secondaryPlayer.destroy();
         logger.debug("MusicManager destroyed for guild: {}", guild.getName());
     }
 
@@ -1257,11 +1273,11 @@ public class MusicManager {
             aloneTask.cancel(true);
         if (watchdogTask != null)
             watchdogTask.cancel(true);
-        if (karaokeTask != null)
-            karaokeTask.cancel(true);
+        stopKaraokeTask();
 
         scheduler.cleanup();
         player.destroy();
+        secondaryPlayer.destroy();
         logger.debug("MusicManager cleanly shutdown for guild: {}", guild.getName());
     }
 

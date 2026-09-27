@@ -82,17 +82,18 @@ public class PlaylistManager {
 
     private File getUserFile(String userId) {
         if (userId == null || !userId.matches("\\d+")) {
-            throw new IllegalArgumentException("Invalid userId format");
+            return null;
         }
         return new File(playlistsDir, userId + ".json");
     }
 
     private UserPlaylistStore loadUserStore(String userId) {
+        if (userId == null || !userId.matches("\\d+")) return new UserPlaylistStore();
         UserPlaylistStore store = cache.get(userId);
         if (store != null) return store;
 
         File file = getUserFile(userId);
-        if (!file.exists()) {
+        if (file == null || !file.exists()) {
             store = new UserPlaylistStore();
             cache.put(userId, store);
             return store;
@@ -112,15 +113,21 @@ public class PlaylistManager {
     }
 
     private void saveStoreData(String userId, UserPlaylistStore store) {
+        if (userId == null || !userId.matches("\\d+")) return;
         saveExecutor.submit(() -> {
             ReentrantLock lock = getUserLock(userId);
             lock.lock();
             try {
                 File tempFile = new File(playlistsDir, userId + ".json.tmp");
                 File actualFile = getUserFile(userId);
+                if (actualFile == null) return;
                 mapper.writeValue(tempFile, store);
-                Files.move(tempFile.toPath(), actualFile.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                try {
+                    Files.move(tempFile.toPath(), actualFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (Exception ex) {
+                    Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
             } catch (IOException e) {
                 logger.error("Failed to save playlist store for user {}", userId, e);
             } finally {
@@ -139,12 +146,13 @@ public class PlaylistManager {
      * Deletes all data for a user (playlists and favorites) and removes their file.
      */
     public void deleteAllUserData(String userId) {
+        if (userId == null || !userId.matches("\\d+")) return;
         ReentrantLock lock = getUserLock(userId);
         lock.lock();
         try {
             cache.remove(userId);
             File actualFile = getUserFile(userId);
-            if (actualFile.exists()) {
+            if (actualFile != null && actualFile.exists()) {
                 actualFile.delete();
             }
         } finally {

@@ -479,7 +479,7 @@ public class PlaylistCommand extends SlashCommand {
                 );
                 String query = pt.getUri() != null && !pt.getUri().isEmpty() 
                                ? pt.getUri() 
-                               : "scsearch:" + cleanTitle + " " + (cleanAuthor != null ? cleanAuthor : "");
+                               : "ytsearch:" + cleanTitle + " " + (cleanAuthor != null ? cleanAuthor : "");
                 track = new com.discord.musicbot.audio.DeferredTrack(info, query, null);
             }
             if (pl.isMewsic()) {
@@ -516,7 +516,7 @@ public class PlaylistCommand extends SlashCommand {
         if (pt.getTitle() != null && !pt.getTitle().isEmpty()) {
             String cleanTitle = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(pt.getTitle());
             String cleanAuthor = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(pt.getAuthor());
-            String search = "scsearch:" + cleanTitle + " " + (cleanAuthor != null ? cleanAuthor : "");
+            String search = "ytsearch:" + cleanTitle + " " + (cleanAuthor != null ? cleanAuthor : "");
             return loadSingle(search.trim(), guild);
         }
         return null;

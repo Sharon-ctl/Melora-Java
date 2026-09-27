@@ -62,17 +62,18 @@ public class HistoryManager {
 
     private File getUserFile(String userId) {
         if (userId == null || !userId.matches("\\d+")) {
-            throw new IllegalArgumentException("Invalid userId format");
+            return null;
         }
         return new File(historyDir, userId + ".json");
     }
 
     private List<HistoryEntry> loadUserHistory(String userId) {
+        if (userId == null || !userId.matches("\\d+")) return new ArrayList<>();
         List<HistoryEntry> history = cache.get(userId);
         if (history != null) return history;
 
         File file = getUserFile(userId);
-        if (!file.exists()) {
+        if (file == null || !file.exists()) {
             history = new ArrayList<>();
             cache.put(userId, history);
             return history;
@@ -95,11 +96,17 @@ public class HistoryManager {
     }
 
     private void saveUserHistory(String userId, List<HistoryEntry> history) {
+        if (userId == null || !userId.matches("\\d+")) return;
         try {
             File tempFile = new File(historyDir, userId + ".json.tmp");
             File actualFile = getUserFile(userId);
+            if (actualFile == null) return;
             mapper.writeValue(tempFile, history);
-            Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            try {
+                Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (Exception ex) {
+                Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             logger.error("Failed to save history for user {}", userId, e);
         }
@@ -117,7 +124,7 @@ public class HistoryManager {
     }
 
     public synchronized void addEntry(String title, String uri, String author, long length, String userId) {
-        if (userId == null) return;
+        if (userId == null || !userId.matches("\\d+")) return;
         List<HistoryEntry> userHistory = loadUserHistory(userId);
         
         // Prevent replay spam
@@ -142,7 +149,7 @@ public class HistoryManager {
     }
 
     public synchronized List<HistoryEntry> getUserHistory(String userId) {
-        if (userId == null) return new ArrayList<>();
+        if (userId == null || !userId.matches("\\d+")) return new ArrayList<>();
         List<HistoryEntry> original = loadUserHistory(userId);
         List<HistoryEntry> copy = new ArrayList<>();
         // Return reversed (newest first)
@@ -153,10 +160,10 @@ public class HistoryManager {
     }
 
     public synchronized void clearHistory(String userId) {
-        if (userId == null) return;
+        if (userId == null || !userId.matches("\\d+")) return;
         cache.remove(userId);
         File f = getUserFile(userId);
-        if (f.exists()) f.delete();
+        if (f != null && f.exists()) f.delete();
     }
 
     public synchronized List<HistoryEntry> getRecent(int limit) {

@@ -30,6 +30,14 @@ public class PlayerManager {
     private static final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
             .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
             .build();
+    public static final com.fasterxml.jackson.databind.ObjectMapper JSON_MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    private static final java.util.regex.Pattern YTS_PATTERN = java.util.regex.Pattern.compile("(?i)<yts>|\\(yts\\)|\\[yts\\]|\\byts\\b");
+    private static final java.util.regex.Pattern MEDIA_TAGS_PATTERN = java.util.regex.Pattern.compile("(?i)\\b(official\\s*music\\s*video|official\\s*video|official\\s*audio|lyric\\s*video|lyrics|audio|video|hq|hd|4k|live|remastered|visualizer)\\b");
+    private static final java.util.regex.Pattern EMPTY_BRACKETS_PATTERN = java.util.regex.Pattern.compile("[\\[\\(<>{}]+\\s*[\\]\\)>}{]]+");
+    private static final java.util.regex.Pattern TRAILING_DASH_PATTERN = java.util.regex.Pattern.compile("\\s+-\\s+$");
+    private static final java.util.regex.Pattern TOPIC_SUFFIX_PATTERN = java.util.regex.Pattern.compile("(?i)\\s*-\\s*topic$");
+    private static final java.util.regex.Pattern MULTI_WHITESPACE_PATTERN = java.util.regex.Pattern.compile("\\s+");
 
     private final DefaultAudioPlayerManager playerManager;
     private final Map<Long, MusicManager> musicManagers;
@@ -39,7 +47,8 @@ public class PlayerManager {
         t.setDaemon(true);
         return t;
     });
-    public static final java.util.concurrent.ScheduledExecutorService scheduledExecutor = java.util.concurrent.Executors.newScheduledThreadPool(4, r -> {
+    public static final java.util.concurrent.ScheduledExecutorService scheduledExecutor = java.util.concurrent.Executors.newScheduledThreadPool(
+            Math.max(8, Runtime.getRuntime().availableProcessors() * 2), r -> {
         Thread t = new Thread(r, "PlayerManager-Scheduled");
         t.setDaemon(true);
         return t;
@@ -335,8 +344,7 @@ public class PlayerManager {
                                     .build();
                             java.net.http.HttpResponse<String> apiResp = client.send(apiReq, java.net.http.HttpResponse.BodyHandlers.ofString());
                             if (apiResp.statusCode() == 200) {
-                                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                                com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(apiResp.body());
+                                com.fasterxml.jackson.databind.JsonNode root = JSON_MAPPER.readTree(apiResp.body());
                                 com.fasterxml.jackson.databind.JsonNode items = root.path("tracks").path("items");
                                 if (items.isArray()) {
                                     String lowerQuery = query.toLowerCase();
@@ -364,7 +372,7 @@ public class PlayerManager {
                                         }
                                         String spotifyUrl = !id.isEmpty() ? "https://open.spotify.com/track/" + id : null;
                                         if (!title.isEmpty() && duration > 0) {
-                                            results.add(new SpotifyMetadata("scsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(title), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
+                                            results.add(new SpotifyMetadata("ytsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(title), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
                                         }
                                     }
                                 }
@@ -396,8 +404,7 @@ public class PlayerManager {
                             java.net.http.HttpResponse.BodyHandlers.ofString());
                     String body = response.body();
 
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(body);
+                    com.fasterxml.jackson.databind.JsonNode root = JSON_MAPPER.readTree(body);
                     com.fasterxml.jackson.databind.JsonNode items = root.path("results");
                     if (items.isArray()) {
                         String lowerQuery = query.toLowerCase();
@@ -418,7 +425,7 @@ public class PlayerManager {
                                 String cleanTitle = cleanTrackTitle(title);
                                 String cleanArtist = cleanTrackTitle(artist);
                                 String fallbackSpotifyUrl = "https://open.spotify.com/search/" + java.net.URLEncoder.encode(cleanTitle + " " + cleanArtist, java.nio.charset.StandardCharsets.UTF_8);
-                                results.add(new SpotifyMetadata("scsearch:" + cleanTitle + " " + cleanArtist, cleanTitle, cleanArtist, artwork, duration, fallbackSpotifyUrl));
+                                results.add(new SpotifyMetadata("ytsearch:" + cleanTitle + " " + cleanArtist, cleanTitle, cleanArtist, artwork, duration, fallbackSpotifyUrl));
                             }
                         }
                     }
@@ -432,12 +439,12 @@ public class PlayerManager {
 
     public static String cleanTrackTitle(String title) {
         if (title == null || title.isBlank()) return "";
-        String cleaned = title.replaceAll("(?i)<yts>|\\(yts\\)|\\[yts\\]|\\byts\\b", "")
-                .replaceAll("(?i)\\b(official\\s*music\\s*video|official\\s*video|official\\s*audio|lyric\\s*video|lyrics|audio|video|hq|hd|4k|live|remastered|visualizer)\\b", "")
-                .replaceAll("[\\[\\(<>{}]+\\s*[\\]\\)>}{]]+", "")
-                .replaceAll("\\s+-\\s+$", "")
-                .replaceAll("(?i)\\s*-\\s*topic$", "")
-                .replaceAll("\\s+", " ").trim();
+        String cleaned = YTS_PATTERN.matcher(title).replaceAll("");
+        cleaned = MEDIA_TAGS_PATTERN.matcher(cleaned).replaceAll("");
+        cleaned = EMPTY_BRACKETS_PATTERN.matcher(cleaned).replaceAll("");
+        cleaned = TRAILING_DASH_PATTERN.matcher(cleaned).replaceAll("");
+        cleaned = TOPIC_SUFFIX_PATTERN.matcher(cleaned).replaceAll("");
+        cleaned = MULTI_WHITESPACE_PATTERN.matcher(cleaned).replaceAll(" ").trim();
         return cleaned.isEmpty() ? title.trim() : cleaned;
     }
 
@@ -465,6 +472,39 @@ public class PlayerManager {
             // ignore
         }
         return null;
+    }
+
+    public CompletableFuture<List<AudioTrack>> searchYouTube(String query) {
+        CompletableFuture<List<AudioTrack>> future = new CompletableFuture<>();
+        String searchQuery = (query.startsWith("ytsearch:") || query.startsWith("ytmsearch:")) ? query : "ytsearch:" + query;
+        CompletableFuture.runAsync(() -> {
+            try {
+                playerManager.loadItemOrdered(this, searchQuery, new AudioLoadResultHandler() {
+                    @Override
+                    public void trackLoaded(AudioTrack track) {
+                        future.complete(List.of(track));
+                    }
+
+                    @Override
+                    public void playlistLoaded(AudioPlaylist playlist) {
+                        future.complete(playlist.getTracks());
+                    }
+
+                    @Override
+                    public void noMatches() {
+                        future.complete(new ArrayList<>());
+                    }
+
+                    @Override
+                    public void loadFailed(FriendlyException exception) {
+                        future.complete(new ArrayList<>());
+                    }
+                });
+            } catch (Exception e) {
+                future.complete(new ArrayList<>());
+            }
+        }, ioExecutor);
+        return future;
     }
 
     public CompletableFuture<List<AudioTrack>> searchSoundCloud(String query) {
@@ -555,7 +595,7 @@ public class PlayerManager {
     }
 
     public void loadSpotifyTrackWithFallback(MusicManager musicManager, SpotifyMetadata meta, com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler handler) {
-        String query = meta.query() != null ? meta.query().replace("ytsearch:", "scsearch:").replace("ytmsearch:", "scsearch:") : "scsearch:" + cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : "");
+        String query = meta.query() != null ? meta.query().replace("scsearch:", "ytsearch:") : "ytsearch:" + cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : "");
         String uri = (meta.spotifyUrl() != null && (meta.spotifyUrl().contains("spotify.com") || meta.spotifyUrl().startsWith("http")))
                 ? meta.spotifyUrl()
                 : "https://open.spotify.com/search/" + java.net.URLEncoder.encode(cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : ""), java.nio.charset.StandardCharsets.UTF_8);
@@ -619,8 +659,7 @@ public class PlayerManager {
                                 .build();
                         java.net.http.HttpResponse<String> apiResp = client.send(apiReq, java.net.http.HttpResponse.BodyHandlers.ofString());
                         if (apiResp.statusCode() == 200) {
-                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                            com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(apiResp.body());
+                            com.fasterxml.jackson.databind.JsonNode node = JSON_MAPPER.readTree(apiResp.body());
                             String tTitle = node.path("name").asText("");
                             StringBuilder artists = new StringBuilder();
                             com.fasterxml.jackson.databind.JsonNode arr = node.path("artists");
@@ -637,7 +676,7 @@ public class PlayerManager {
                                 art = imgs.get(0).path("url").asText(null);
                             }
                             if (!tTitle.isEmpty() && dur > 0) {
-                                return new SpotifyMetadata("scsearch:" + cleanTrackTitle(tTitle) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(tTitle), cleanTrackTitle(artists.toString()), art, dur, url);
+                                return new SpotifyMetadata("ytsearch:" + cleanTrackTitle(tTitle) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(tTitle), cleanTrackTitle(artists.toString()), art, dur, url);
                             }
                         }
                     } catch (Exception ignored) {}
@@ -690,7 +729,7 @@ public class PlayerManager {
                 }
 
                 if (!title.isEmpty()) {
-                    return new SpotifyMetadata("scsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artist), cleanTrackTitle(title), cleanTrackTitle(artist), artworkUrl, duration, url);
+                    return new SpotifyMetadata("ytsearch:" + cleanTrackTitle(title) + " " + cleanTrackTitle(artist), cleanTrackTitle(title), cleanTrackTitle(artist), artworkUrl, duration, url);
                 }
             } catch (Exception e) {
                 logger.error("Failed to fetch Spotify URL: " + url, e);
@@ -789,8 +828,7 @@ public class PlayerManager {
                     String base64 = stateMatcher.group(1);
                     String json = new String(java.util.Base64.getDecoder().decode(base64),
                             java.nio.charset.StandardCharsets.UTF_8);
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(json);
+                    com.fasterxml.jackson.databind.JsonNode root = JSON_MAPPER.readTree(json);
 
                     com.fasterxml.jackson.databind.JsonNode entities = root.path("entities").path("items");
                     if (!entities.isMissingNode()) {
@@ -876,7 +914,7 @@ public class PlayerManager {
                                             duration = trackData.path("duration_ms").asLong(0);
                                         }
 
-                                        tracks.add(new SpotifyMetadata("scsearch:" + cleanTrackTitle(name) + " " + cleanTrackTitle(artistStr.toString()), cleanTrackTitle(name), cleanTrackTitle(artistStr.toString()), artwork, duration, spotifyUrl));
+                                        tracks.add(new SpotifyMetadata("ytsearch:" + cleanTrackTitle(name) + " " + cleanTrackTitle(artistStr.toString()), cleanTrackTitle(name), cleanTrackTitle(artistStr.toString()), artwork, duration, spotifyUrl));
                                     } catch (Exception e) {
                                         logger.debug("Spotify: Failed to parse track item", e);
                                     }
@@ -905,7 +943,6 @@ public class PlayerManager {
                         try {
                             int offset = tracks.size();
                             int targetCount = Math.min(totalCount, 100);
-                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                             while (offset < targetCount) {
                                 String apiUrl = isAlbum
                                         ? "https://api.spotify.com/v1/albums/" + id + "/tracks?limit=50&offset=" + offset
@@ -931,7 +968,7 @@ public class PlayerManager {
                                     break;
                                 }
                                 
-                                com.fasterxml.jackson.databind.JsonNode apiRoot = mapper.readTree(apiResp.body());
+                                com.fasterxml.jackson.databind.JsonNode apiRoot = JSON_MAPPER.readTree(apiResp.body());
                                 com.fasterxml.jackson.databind.JsonNode items = apiRoot.path("items");
                                 List<SpotifyMetadata> pageTracks = new ArrayList<>();
                                 for (com.fasterxml.jackson.databind.JsonNode apiItem : items) {
@@ -966,7 +1003,7 @@ public class PlayerManager {
                                     String spotifyUrl = !trackId.isEmpty() ? "https://open.spotify.com/track/" + trackId : null;
 
                                     long duration = td.path("duration_ms").asLong(0);
-                                    pageTracks.add(new SpotifyMetadata("scsearch:" + cleanTrackTitle(trackName) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(trackName), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
+                                    pageTracks.add(new SpotifyMetadata("ytsearch:" + cleanTrackTitle(trackName) + " " + cleanTrackTitle(artists.toString()), cleanTrackTitle(trackName), cleanTrackTitle(artists.toString()), artwork, duration, spotifyUrl));
                                 }
                                 if (pageTracks.isEmpty()) break;
                                 tracks.addAll(pageTracks);
@@ -1005,8 +1042,9 @@ public class PlayerManager {
     }
 
     public void loadItemWithFallback(Object orderingKey, String query, AudioLoadResultHandler handler) {
-        if (query.startsWith("scsearch:")) {
-            // Primary: SoundCloud search
+        if (query.startsWith("ytsearch:") || query.startsWith("ytmsearch:")) {
+            final String prefix = query.startsWith("ytmsearch:") ? "ytmsearch:" : "ytsearch:";
+            // Primary: YouTube search
             playerManager.loadItemOrdered(orderingKey, query, new AudioLoadResultHandler() {
                 @Override
                 public void trackLoaded(AudioTrack track) {
@@ -1024,14 +1062,14 @@ public class PlayerManager {
 
                 @Override
                 public void noMatches() {
-                    String rawQuery = query.substring("scsearch:".length()).trim();
+                    String rawQuery = query.substring(prefix.length()).trim();
                     // 1. Try Spotify/iTunes metadata to resolve any typos
                     searchSpotify(rawQuery).thenAccept(spotifyResults -> {
                         if (spotifyResults != null && !spotifyResults.isEmpty()) {
                             SpotifyMetadata meta = spotifyResults.get(0);
-                            String correctedScQuery = "scsearch:" + cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : "");
-                            if (!correctedScQuery.equalsIgnoreCase(query)) {
-                                playerManager.loadItemOrdered(orderingKey, correctedScQuery, new AudioLoadResultHandler() {
+                            String correctedYtQuery = prefix + cleanTrackTitle(meta.title()) + " " + cleanTrackTitle(meta.artist() != null ? meta.artist() : "");
+                            if (!correctedYtQuery.equalsIgnoreCase(query)) {
+                                playerManager.loadItemOrdered(orderingKey, correctedYtQuery, new AudioLoadResultHandler() {
                                     @Override
                                     public void trackLoaded(AudioTrack track) {
                                         handler.trackLoaded(track);
@@ -1046,50 +1084,38 @@ public class PlayerManager {
                                     }
                                     @Override
                                     public void noMatches() {
-                                        tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
+                                        tryRelaxedYouTubeSearch(orderingKey, rawQuery, prefix, handler);
                                     }
                                     @Override
                                     public void loadFailed(FriendlyException exception) {
-                                        tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
+                                        tryRelaxedYouTubeSearch(orderingKey, rawQuery, prefix, handler);
                                     }
                                 });
                                 return;
                             }
                         }
-                        // 2. Try relaxing the query on SoundCloud
-                        tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
+                        // 2. Try relaxing the query on YouTube
+                        tryRelaxedYouTubeSearch(orderingKey, rawQuery, prefix, handler);
                     }).exceptionally(ex -> {
-                        tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
+                        tryRelaxedYouTubeSearch(orderingKey, rawQuery, prefix, handler);
                         return null;
                     });
                 }
 
                 @Override
                 public void loadFailed(FriendlyException exception) {
-                    String rawQuery = query.substring("scsearch:".length()).trim();
-                    tryRelaxedSoundCloudSearch(orderingKey, rawQuery, handler);
+                    String rawQuery = query.substring(prefix.length()).trim();
+                    tryRelaxedYouTubeSearch(orderingKey, rawQuery, prefix, handler);
                 }
             });
-        } else {
-            boolean isDirectUrl = query.startsWith("http://") || query.startsWith("https://") || query.contains("://") || query.startsWith("scsearch:");
-            String targetQuery = isDirectUrl ? query : "scsearch:" + query;
-            if (!isDirectUrl) {
-                loadItemWithFallback(orderingKey, targetQuery, handler);
-            } else {
-                playerManager.loadItemOrdered(orderingKey, query, handler);
-            }
-        }
-    }
-
-    private void tryRelaxedSoundCloudSearch(Object orderingKey, String rawQuery, AudioLoadResultHandler handler) {
-        String[] words = rawQuery.split("\\s+");
-        if (words.length > 2) {
-            String relaxedQuery = "scsearch:" + words[0] + " " + words[1];
-            playerManager.loadItemOrdered(orderingKey, relaxedQuery, new AudioLoadResultHandler() {
+        } else if (query.startsWith("scsearch:")) {
+            // Secondary / explicit: SoundCloud search
+            playerManager.loadItemOrdered(orderingKey, query, new AudioLoadResultHandler() {
                 @Override
                 public void trackLoaded(AudioTrack track) {
                     handler.trackLoaded(track);
                 }
+
                 @Override
                 public void playlistLoaded(AudioPlaylist playlist) {
                     if (playlist.getTracks().isEmpty()) {
@@ -1098,18 +1124,84 @@ public class PlayerManager {
                         handler.playlistLoaded(playlist);
                     }
                 }
+
                 @Override
                 public void noMatches() {
                     handler.noMatches();
                 }
+
                 @Override
                 public void loadFailed(FriendlyException exception) {
                     handler.loadFailed(exception);
                 }
             });
         } else {
-            handler.noMatches();
+            boolean isDirectUrl = query.startsWith("http://") || query.startsWith("https://") || query.contains("://")
+                    || query.startsWith("ytsearch:") || query.startsWith("ytmsearch:") || query.startsWith("scsearch:");
+            String targetQuery = isDirectUrl ? query : "ytsearch:" + query;
+            if (!isDirectUrl) {
+                loadItemWithFallback(orderingKey, targetQuery, handler);
+            } else {
+                playerManager.loadItemOrdered(orderingKey, query, handler);
+            }
         }
+    }
+
+    private void tryRelaxedYouTubeSearch(Object orderingKey, String rawQuery, String prefix, AudioLoadResultHandler handler) {
+        String[] words = rawQuery.split("\\s+");
+        if (words.length > 2) {
+            String relaxedQuery = prefix + words[0] + " " + words[1];
+            playerManager.loadItemOrdered(orderingKey, relaxedQuery, new AudioLoadResultHandler() {
+                @Override
+                public void trackLoaded(AudioTrack track) {
+                    handler.trackLoaded(track);
+                }
+                @Override
+                public void playlistLoaded(AudioPlaylist playlist) {
+                    if (playlist.getTracks().isEmpty()) {
+                        trySoundCloudFallback(orderingKey, rawQuery, handler);
+                    } else {
+                        handler.playlistLoaded(playlist);
+                    }
+                }
+                @Override
+                public void noMatches() {
+                    trySoundCloudFallback(orderingKey, rawQuery, handler);
+                }
+                @Override
+                public void loadFailed(FriendlyException exception) {
+                    trySoundCloudFallback(orderingKey, rawQuery, handler);
+                }
+            });
+        } else {
+            trySoundCloudFallback(orderingKey, rawQuery, handler);
+        }
+    }
+
+    private void trySoundCloudFallback(Object orderingKey, String rawQuery, AudioLoadResultHandler handler) {
+        String scQuery = "scsearch:" + rawQuery;
+        playerManager.loadItemOrdered(orderingKey, scQuery, new AudioLoadResultHandler() {
+            @Override
+            public void trackLoaded(AudioTrack track) {
+                handler.trackLoaded(track);
+            }
+            @Override
+            public void playlistLoaded(AudioPlaylist playlist) {
+                if (playlist.getTracks().isEmpty()) {
+                    handler.noMatches();
+                } else {
+                    handler.playlistLoaded(playlist);
+                }
+            }
+            @Override
+            public void noMatches() {
+                handler.noMatches();
+            }
+            @Override
+            public void loadFailed(FriendlyException exception) {
+                handler.loadFailed(exception);
+            }
+        });
     }
 
     public void loadItemOrdered(Guild guild, String rawTrackUrl, AudioLoadResultHandler handler) {
@@ -1149,9 +1241,10 @@ public class PlayerManager {
                 });
             }
         } else {
-            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:");
+            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://")
+                    || trackUrl.startsWith("ytsearch:") || trackUrl.startsWith("ytmsearch:") || trackUrl.startsWith("scsearch:");
             if (!isDirectUrl) {
-                loadItemWithFallback(musicManager, "scsearch:" + trackUrl, handler);
+                loadItemWithFallback(musicManager, "ytsearch:" + trackUrl, handler);
             } else {
                 loadItemWithFallback(musicManager, trackUrl, handler);
             }
@@ -1245,7 +1338,7 @@ public class PlayerManager {
                 });
             }
         } else {
-            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:");
+            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:") || trackUrl.startsWith("ytsearch:") || trackUrl.startsWith("ytmsearch:");
             if (!isDirectUrl) {
                 searchSpotify(trackUrl).thenAccept(spotifyResults -> {
                     if (spotifyResults != null && !spotifyResults.isEmpty()) {
@@ -1274,19 +1367,19 @@ public class PlayerManager {
 
                             @Override
                             public void noMatches() {
-                                executeLoadAndPlay(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                                executeLoadAndPlay(event, "ytsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                             }
 
                             @Override
                             public void loadFailed(FriendlyException exception) {
-                                executeLoadAndPlay(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                                executeLoadAndPlay(event, "ytsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                             }
                         });
                     } else {
-                        executeLoadAndPlay(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                        executeLoadAndPlay(event, "ytsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                     }
                 }).exceptionally(ex -> {
-                    executeLoadAndPlay(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                    executeLoadAndPlay(event, "ytsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                     return null;
                 });
             } else {
@@ -1429,25 +1522,25 @@ public class PlayerManager {
                         }
                         @Override
                         public void noMatches() {
-                            executeLoadAndPlayInstant(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                            executeLoadAndPlayInstant(event, "ytsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                         }
                         @Override
                         public void loadFailed(FriendlyException exception) {
-                            executeLoadAndPlayInstant(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                            executeLoadAndPlayInstant(event, "ytsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                         }
                     });
                 } else {
                     executeLoadAndPlayInstant(event, trackUrl, forcedArtworkUrl, musicManager);
                 }
             }).exceptionally(ex -> {
-                logger.warn("searchSpotify failed for instant play command: {}, falling back to scsearch", trackUrl, ex);
-                executeLoadAndPlayInstant(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                logger.warn("searchSpotify failed for instant play command: {}, falling back to ytsearch", trackUrl, ex);
+                executeLoadAndPlayInstant(event, "ytsearch:" + trackUrl, forcedArtworkUrl, musicManager);
                 return null;
             });
         } else {
-            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:");
+            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:") || trackUrl.startsWith("ytsearch:") || trackUrl.startsWith("ytmsearch:");
             if (!isDirectUrl) {
-                executeLoadAndPlayInstant(event, "scsearch:" + trackUrl, forcedArtworkUrl, musicManager);
+                executeLoadAndPlayInstant(event, "ytsearch:" + trackUrl, forcedArtworkUrl, musicManager);
             } else {
                 executeLoadAndPlayInstant(event, trackUrl, forcedArtworkUrl, musicManager);
             }
@@ -1577,7 +1670,7 @@ public class PlayerManager {
                 }
             });
         } else {
-            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:");
+            boolean isDirectUrl = trackUrl.startsWith("http://") || trackUrl.startsWith("https://") || trackUrl.contains("://") || trackUrl.startsWith("scsearch:") || trackUrl.startsWith("ytsearch:") || trackUrl.startsWith("ytmsearch:");
             if (!isDirectUrl) {
                 searchSpotify(trackUrl).thenAccept(spotifyResults -> {
                     if (spotifyResults != null && !spotifyResults.isEmpty()) {
@@ -1602,19 +1695,19 @@ public class PlayerManager {
 
                             @Override
                             public void noMatches() {
-                                executeLoadAndInsert(event, "scsearch:" + trackUrl, position, musicManager);
+                                executeLoadAndInsert(event, "ytsearch:" + trackUrl, position, musicManager);
                             }
 
                             @Override
                             public void loadFailed(FriendlyException exception) {
-                                executeLoadAndInsert(event, "scsearch:" + trackUrl, position, musicManager);
+                                executeLoadAndInsert(event, "ytsearch:" + trackUrl, position, musicManager);
                             }
                         });
                     } else {
-                        executeLoadAndInsert(event, "scsearch:" + trackUrl, position, musicManager);
+                        executeLoadAndInsert(event, "ytsearch:" + trackUrl, position, musicManager);
                     }
                 }).exceptionally(ex -> {
-                    executeLoadAndInsert(event, "scsearch:" + trackUrl, position, musicManager);
+                    executeLoadAndInsert(event, "ytsearch:" + trackUrl, position, musicManager);
                     return null;
                 });
             } else {

@@ -26,11 +26,14 @@ public class NowPlayingApiServer {
     private final HttpServer server;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private final java.util.concurrent.ExecutorService serverExecutor;
+
     public NowPlayingApiServer(int port) throws IOException {
         // Bind to 127.0.0.1 (local only)
         this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         this.server.createContext("/nowplaying", new NowPlayingHandler());
-        this.server.setExecutor(null); // default executor
+        this.serverExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        this.server.setExecutor(serverExecutor);
     }
 
     public void start() {
@@ -39,6 +42,9 @@ public class NowPlayingApiServer {
 
     public void stop() {
         server.stop(0);
+        if (serverExecutor != null) {
+            serverExecutor.shutdownNow();
+        }
     }
 
     private class NowPlayingHandler implements HttpHandler {

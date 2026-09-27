@@ -20,10 +20,13 @@ import java.util.concurrent.CompletableFuture;
 
 public class LyricsManager {
     private static final Logger logger = LoggerFactory.getLogger(LyricsManager.class);
-    private static final HttpClient httpClient = HttpClient.newHttpClient();
+    private static final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(5))
+            .build();
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final String LRCLIB_URL = "https://lrclib.net/api/search?q=";
     private static final String GENIUS_URL = "https://api.genius.com/search?q=";
+    private static final java.util.regex.Pattern LRC_TIMESTAMP_PATTERN = java.util.regex.Pattern.compile("\\[\\d{2}:\\d{2}(\\.\\d{2,3})?\\]\\s*");
 
     private static String geniusToken;
 
@@ -58,6 +61,7 @@ public class LyricsManager {
                 String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
                 HttpRequest lrcReq = HttpRequest.newBuilder()
                         .uri(URI.create(LRCLIB_URL + encodedQuery))
+                        .timeout(java.time.Duration.ofSeconds(5))
                         .header("User-Agent", "DiscordMusicBot (https://github.com/Sharon-ctl/Melora-Java)")
                         .build();
 
@@ -73,7 +77,7 @@ public class LyricsManager {
                         if (plain != null && !plain.isBlank()) {
                             return new LyricsResult(plain, "LRCLIB", hasSynced);
                         } else if (hasSynced) {
-                            String stripped = synced.replaceAll("\\[\\d{2}:\\d{2}(\\.\\d{2,3})?\\]\\s*", "");
+                            String stripped = LRC_TIMESTAMP_PATTERN.matcher(synced).replaceAll("");
                             return new LyricsResult(stripped, "LRCLIB", true);
                         }
                     }
@@ -91,6 +95,7 @@ public class LyricsManager {
                 String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
                 HttpRequest geniusReq = HttpRequest.newBuilder()
                         .uri(URI.create(GENIUS_URL + encodedQuery))
+                        .timeout(java.time.Duration.ofSeconds(5))
                         .header("Authorization", "Bearer " + geniusToken)
                         .header("User-Agent", "DiscordMusicBot")
                         .build();
@@ -120,6 +125,7 @@ public class LyricsManager {
                 String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
                 HttpRequest lrcReq = HttpRequest.newBuilder()
                         .uri(URI.create(LRCLIB_URL + encodedQuery))
+                        .timeout(java.time.Duration.ofSeconds(5))
                         .header("User-Agent", "DiscordMusicBot")
                         .build();
 
@@ -141,6 +147,7 @@ public class LyricsManager {
     private static String scrapeGeniusLyrics(String url) {
         try {
             Document doc = Jsoup.connect(url)
+                    .timeout(5000)
                     .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                     .get();
 

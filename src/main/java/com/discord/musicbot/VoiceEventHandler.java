@@ -115,6 +115,13 @@ public class VoiceEventHandler extends ListenerAdapter {
             return;
         }
 
+        // Only process member changes if someone joined or left the bot's channel
+        boolean channelRelevant = (event.getChannelLeft() != null && event.getChannelLeft().equals(botChannel))
+                || (event.getChannelJoined() != null && event.getChannelJoined().equals(botChannel));
+        if (!channelRelevant) {
+            return;
+        }
+
         MusicManager manager = PlayerManager.getInstance().getMusicManager(guild.getIdLong());
         if (manager == null) return; // No active music session, nothing to do
 

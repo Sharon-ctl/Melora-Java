@@ -73,7 +73,11 @@ public class UserExcludeManager {
             try {
                 File tempFile = new File(EXCLUDES_FILE + ".tmp");
                 mapper.writeValue(tempFile, snapshot);
-                Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                try {
+                    Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (Exception ex) {
+                    Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
             } catch (IOException e) {
                 logger.error("Failed to save user excludes", e);
             }

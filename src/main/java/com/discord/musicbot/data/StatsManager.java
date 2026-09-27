@@ -59,17 +59,20 @@ public class StatsManager {
 
     private File getUserFile(String userId) {
         if (userId == null || !userId.matches("\\d+")) {
-            throw new IllegalArgumentException("Invalid userId format");
+            return null;
         }
         return new File(statsDir, userId + ".json");
     }
 
     private UserStats loadUserStats(String userId) {
+        if (userId == null || !userId.matches("\\d+")) {
+            return new UserStats();
+        }
         UserStats stats = cache.get(userId);
         if (stats != null) return stats;
 
         File file = getUserFile(userId);
-        if (!file.exists()) {
+        if (file == null || !file.exists()) {
             stats = new UserStats();
             cache.put(userId, stats);
             return stats;
@@ -89,17 +92,24 @@ public class StatsManager {
     }
 
     private void saveUserStats(String userId, UserStats stats) {
+        if (userId == null || !userId.matches("\\d+")) return;
         try {
             File tempFile = new File(statsDir, userId + ".json.tmp");
             File actualFile = getUserFile(userId);
+            if (actualFile == null) return;
             mapper.writeValue(tempFile, stats);
-            Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            try {
+                Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (Exception ex) {
+                Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             logger.error("Failed to save stats for user {}", userId, e);
         }
     }
 
     private void scheduleSave(String userId) {
+        if (userId == null || !userId.matches("\\d+")) return;
         UserStats stats = cache.get(userId);
         if (stats != null) {
             saveExecutor.submit(() -> saveUserStats(userId, stats));
@@ -111,13 +121,13 @@ public class StatsManager {
     }
 
     public void incrementCommand(String userId, String command) {
-        if (userId == null) return;
+        if (userId == null || !userId.matches("\\d+")) return;
         getStats(userId).incrementCommand(command);
         scheduleSave(userId);
     }
 
     public void addListeningData(String userId, String trackName, String artist, long durationMs) {
-        if (userId == null || trackName == null) return;
+        if (userId == null || !userId.matches("\\d+") || trackName == null) return;
         UserStats stats = getStats(userId);
         stats.incrementTracksPlayed();
         stats.addListeningTime(durationMs);
@@ -129,7 +139,7 @@ public class StatsManager {
     }
 
     public void addDjPoints(String userId, long points) {
-        if (userId == null) return;
+        if (userId == null || !userId.matches("\\d+")) return;
         getStats(userId).addDjPoints(points);
         scheduleSave(userId);
     }
@@ -141,10 +151,10 @@ public class StatsManager {
     }
 
     public void clearStats(String userId) {
-        if (userId == null) return;
+        if (userId == null || !userId.matches("\\d+")) return;
         cache.remove(userId);
         File f = getUserFile(userId);
-        if (f.exists()) f.delete();
+        if (f != null && f.exists()) f.delete();
     }
 
     public void shutdown() {

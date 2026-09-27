@@ -157,7 +157,8 @@ public class BotLauncher {
                         // Register all Slash Commands
                         jda.updateCommands().addCommands(registry.getCommandData())
                                         .queue(commands -> logger.info("Registered {} slash commands",
-                                                        commands.size()));
+                                                        commands.size()),
+                                               error -> logger.error("Failed to register slash commands with Discord", error));
 
                         logger.info("Bot is ready! Logged in as: {}", jda.getSelfUser().getName());
 

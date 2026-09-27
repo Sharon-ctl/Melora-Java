@@ -44,16 +44,21 @@ public class KaraokeManager {
 
     public static int getActiveLineIndex(List<LrcLine> lines, long currentPositionMs) {
         if (lines == null || lines.isEmpty()) return -1;
+        if (currentPositionMs < lines.get(0).timestampMs) return -1;
 
-        int activeIdx = -1;
-        for (int i = 0; i < lines.size(); i++) {
-            if (currentPositionMs >= lines.get(i).timestampMs) {
-                activeIdx = i;
+        int low = 0;
+        int high = lines.size() - 1;
+        int ans = -1;
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            if (lines.get(mid).timestampMs <= currentPositionMs) {
+                ans = mid;
+                low = mid + 1;
             } else {
-                break;
+                high = mid - 1;
             }
         }
-        return activeIdx;
+        return ans;
     }
 
     public static List<LrcLine> getActiveLineWindow(List<LrcLine> lines, int activeIndex, int windowBefore, int windowAfter) {

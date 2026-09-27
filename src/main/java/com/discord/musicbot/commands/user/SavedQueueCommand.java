@@ -49,7 +49,7 @@ public class SavedQueueCommand extends SlashCommand {
                             cleanAuthor,
                             t.getDuration(),
                             t.getInfo().uri,
-                            t.getInfo().uri != null ? t.getInfo().uri : "scsearch:" + cleanTitle + " " + cleanAuthor,
+                            t.getInfo().uri != null ? t.getInfo().uri : "ytsearch:" + cleanTitle + " " + cleanAuthor,
                             null
                     ));
                 }
@@ -87,7 +87,7 @@ public class SavedQueueCommand extends SlashCommand {
                             pt.getTitle(), pt.getAuthor(), pt.getDuration(), "id", false, pt.getUri()
                     );
                     DeferredTrack track = new DeferredTrack(info, pt.getSource(), null);
-                    track.setUserData(ctx.getUser());
+                    track.setUserData("{\"requester\":\"" + ctx.getUser().getId() + "\"}");
                     ctx.getScheduler().queue(track);
                     added++;
                 }

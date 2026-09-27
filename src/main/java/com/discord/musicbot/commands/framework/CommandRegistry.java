@@ -135,9 +135,9 @@ public class CommandRegistry {
             net.dv8tion.jda.api.components.textdisplay.TextDisplay.of(EmbedHelper.MSG_ERROR + " " + msg)
         ).withAccentColor(EmbedHelper.COLOR_MAIN);
         if (callback.isAcknowledged()) {
-            callback.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue();
+            callback.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue(null, e -> {});
         } else {
-            callback.replyComponents(container).useComponentsV2().setEphemeral(true).queue();
+            callback.replyComponents(container).useComponentsV2().setEphemeral(true).queue(null, e -> {});
         }
     }
 

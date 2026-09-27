@@ -1,17 +1,26 @@
 package com.discord.musicbot.lyrics;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class LyricsCache {
-    private static final Map<String, LyricsData> cache = new ConcurrentHashMap<>();
+    private static final int MAX_CACHE_SIZE = 250;
+    private static final Map<String, LyricsData> cache = Collections.synchronizedMap(
+            new LinkedHashMap<String, LyricsData>(MAX_CACHE_SIZE, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, LyricsData> eldest) {
+                    return size() > MAX_CACHE_SIZE;
+                }
+            });
     private static final ScheduledExecutorService cleaner = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r);
         t.setDaemon(true);
+        t.setName("LyricsCache-Cleaner");
         return t;
     });
 
@@ -34,19 +43,22 @@ public class LyricsCache {
     static {
         // Clean up cache entries older than 30 minutes
         cleaner.scheduleAtFixedRate(() -> {
-            long now = System.currentTimeMillis();
-            cache.entrySet().removeIf(entry -> now - entry.getValue().timestamp > 30 * 60 * 1000);
+            try {
+                long now = System.currentTimeMillis();
+                synchronized (cache) {
+                    cache.entrySet().removeIf(entry -> now - entry.getValue().timestamp > 30 * 60 * 1000);
+                }
+            } catch (Exception ignored) {}
         }, 30, 30, TimeUnit.MINUTES);
     }
 
     public static void put(String id, LyricsData data) {
-        if (cache.size() >= 100) {
-            cache.clear(); // simple cap to prevent unbounded growth
-        }
+        if (id == null || data == null) return;
         cache.put(id, data);
     }
 
     public static LyricsData get(String id) {
+        if (id == null) return null;
         return cache.get(id);
     }
 }

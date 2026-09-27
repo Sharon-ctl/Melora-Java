@@ -575,14 +575,14 @@ public class InteractionHandler {
     private static void replyError(net.dv8tion.jda.api.interactions.callbacks.IReplyCallback event, String msg) {
         String content = msg.startsWith(EmbedHelper.MSG_ERROR) ? msg : EmbedHelper.MSG_ERROR + " " + msg;
         var container = Container.of(TextDisplay.of(content)).withAccentColor(EmbedHelper.COLOR_MAIN);
-        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue();
-        else event.replyComponents(container).useComponentsV2().setEphemeral(true).queue();
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue(null, e -> {});
+        else event.replyComponents(container).useComponentsV2().setEphemeral(true).queue(null, e -> {});
     }
 
     private static void replySuccess(net.dv8tion.jda.api.interactions.callbacks.IReplyCallback event, String msg) {
         String content = msg.startsWith(EmbedHelper.MSG_SUCCESS) ? msg : EmbedHelper.MSG_SUCCESS + " " + msg;
         var container = Container.of(TextDisplay.of(content)).withAccentColor(EmbedHelper.COLOR_MAIN);
-        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue();
-        else event.replyComponents(container).useComponentsV2().setEphemeral(true).queue();
+        if (event.isAcknowledged()) event.getHook().sendMessageComponents(container).useComponentsV2().setEphemeral(true).queue(null, e -> {});
+        else event.replyComponents(container).useComponentsV2().setEphemeral(true).queue(null, e -> {});
     }
 }

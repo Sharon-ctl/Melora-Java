@@ -95,7 +95,11 @@ public class SavedQueueManager {
                 File file = getFile(userId);
                 File temp = new File(dir, userId + ".tmp");
                 mapper.writeValue(temp, store);
-                Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                try {
+                    Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (Exception ex) {
+                    Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
             } catch (IOException e) {
                 logger.error("Failed to save saved queues for " + userId, e);
             } finally {
