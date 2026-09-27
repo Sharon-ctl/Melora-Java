@@ -68,73 +68,77 @@ public class PlayerManager {
         playerManager.getConfiguration().setFilterHotSwapEnabled(true);
         playerManager.setFrameBufferDuration(1000);
 
-        // --- Register YouTube Source (v2) with all available resilient clients ---
-        // NOTE: Android and Ios clients removed — both are broken and return HTTP 400.
-        // Music (WEB_REMIX) is prioritized first as it works best with OAuth2.
+        // --- Initialize environment variables for YouTube & audio configuration ---
+        io.github.cdimascio.dotenv.Dotenv dotenv = null;
+        try {
+            dotenv = io.github.cdimascio.dotenv.Dotenv.load();
+        } catch (Exception e) {
+            dotenv = io.github.cdimascio.dotenv.Dotenv.configure().ignoreIfMissing().load();
+        }
+
+        String poTokenApi = dotenv != null ? dotenv.get("YOUTUBE_PO_TOKEN_API") : null;
+        String poToken = dotenv != null ? dotenv.get("YOUTUBE_PO_TOKEN") : null;
+        String visitorData = dotenv != null ? dotenv.get("YOUTUBE_VISITOR_DATA") : null;
+
+        if (poTokenApi != null && !poTokenApi.isEmpty()) {
+            logger.info("Fetching PO Token automatically from remote API: {}", poTokenApi);
+            try {
+                java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create(poTokenApi))
+                        .header("User-Agent", "Mozilla/5.0")
+                        .timeout(java.time.Duration.ofSeconds(5))
+                        .GET()
+                        .build();
+                java.net.http.HttpResponse<String> response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() == 200) {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(response.body());
+                    if (root.has("poToken") && root.has("visitorData")) {
+                        poToken = root.path("poToken").asText();
+                        visitorData = root.path("visitorData").asText();
+                        logger.info("Successfully fetched PO Token and Visitor Data from API!");
+                    } else {
+                        logger.warn("PO Token API responded but missing expected fields (poToken, visitorData).");
+                    }
+                } else {
+                    logger.warn("PO Token API responded with status {}", response.statusCode());
+                }
+            } catch (Exception apiEx) {
+                logger.error("Failed to fetch PO Token from remote API", apiEx);
+            }
+        }
+
+        boolean hasPoToken = (poToken != null && !poToken.isEmpty() && visitorData != null && !visitorData.isEmpty());
+        if (hasPoToken) {
+            dev.lavalink.youtube.clients.Web.setPoTokenAndVisitorData(poToken, visitorData);
+            dev.lavalink.youtube.clients.WebEmbedded.setPoTokenAndVisitorData(poToken, visitorData);
+            logger.info("YouTube PO Token and Visitor Data injected successfully.");
+        } else {
+            logger.info("No PO Token provided. SafeMWebClient will route playback through progressive formats to bypass 403 blocks.");
+        }
+
+        // --- Register YouTube Source (v2) with resilient 403-safe clients ---
+        // SafeMWebClient prevents 403s on GoogleVideo CDN when no PO token is present.
+        // Music handles YouTube Music searches (ytmsearch:).
+        // Web, TvHtml5Simply, Tv, AndroidVr, WebEmbedded follow as fallbacks.
         YoutubeAudioSourceManager youtube = new YoutubeAudioSourceManager(true,
+                new SafeMWebClient(hasPoToken),
                 new dev.lavalink.youtube.clients.Music(),
+                new dev.lavalink.youtube.clients.Web(),
                 new dev.lavalink.youtube.clients.TvHtml5Simply(),
                 new dev.lavalink.youtube.clients.Tv(),
                 new dev.lavalink.youtube.clients.AndroidVr(),
-                new dev.lavalink.youtube.clients.AndroidMusic(),
-                new dev.lavalink.youtube.clients.Web(),
                 new dev.lavalink.youtube.clients.WebEmbedded());
-        
+
         try {
-            io.github.cdimascio.dotenv.Dotenv dotenv = io.github.cdimascio.dotenv.Dotenv.load();
-            String oauthToken = dotenv.get("YOUTUBE_OAUTH2_TOKEN");
-            
+            String oauthToken = dotenv != null ? dotenv.get("YOUTUBE_OAUTH2_TOKEN") : null;
             if (oauthToken != null && !oauthToken.isEmpty()) {
                 youtube.useOauth2(oauthToken, true);
-                logger.info("YouTube OAuth2 token loaded! You should not experience any 403 errors.");
-            } else {
-                logger.warn("No YOUTUBE_OAUTH2_TOKEN found. The bot will use OAuth2 device authorization.");
-                logger.warn("CHECK THE CONSOLE BELOW for a Google Device Login code to authorize the bot!");
-                youtube.useOauth2(null, false);
+                logger.info("YouTube OAuth2 token loaded!");
             }
 
-            String poTokenApi = dotenv.get("YOUTUBE_PO_TOKEN_API");
-            String poToken = dotenv.get("YOUTUBE_PO_TOKEN");
-            String visitorData = dotenv.get("YOUTUBE_VISITOR_DATA");
-            
-            if (poTokenApi != null && !poTokenApi.isEmpty()) {
-                logger.info("Fetching PO Token automatically from remote API: {}", poTokenApi);
-                try {
-                    java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                            .uri(java.net.URI.create(poTokenApi))
-                            .header("User-Agent", "Mozilla/5.0")
-                            .timeout(java.time.Duration.ofSeconds(5))
-                            .GET()
-                            .build();
-                    java.net.http.HttpResponse<String> response = httpClient.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-                    
-                    if (response.statusCode() == 200) {
-                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                        com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(response.body());
-                        if (root.has("poToken") && root.has("visitorData")) {
-                            poToken = root.path("poToken").asText();
-                            visitorData = root.path("visitorData").asText();
-                            logger.info("Successfully fetched PO Token and Visitor Data from API!");
-                        } else {
-                            logger.warn("PO Token API responded but missing expected fields (poToken, visitorData).");
-                        }
-                    } else {
-                        logger.warn("PO Token API responded with status {}", response.statusCode());
-                    }
-                } catch (Exception apiEx) {
-                    logger.error("Failed to fetch PO Token from remote API", apiEx);
-                }
-            }
-
-            if (poToken != null && !poToken.isEmpty() && visitorData != null && !visitorData.isEmpty()) {
-                dev.lavalink.youtube.clients.Web.setPoTokenAndVisitorData(poToken, visitorData);
-                dev.lavalink.youtube.clients.WebEmbedded.setPoTokenAndVisitorData(poToken, visitorData);
-                logger.info("YouTube PO Token and Visitor Data injected successfully. Bypassing age restrictions!");
-            } else {
-                logger.warn("No PO Token provided or fetched. Age-restricted videos and bot checks will fail.");
-            }
-
-            String ipv6Block = dotenv.get("IPV6_BLOCK");
+            String ipv6Block = dotenv != null ? dotenv.get("IPV6_BLOCK") : null;
             if (ipv6Block != null && !ipv6Block.isEmpty()) {
                 try {
                     com.sedmelluq.lava.extensions.youtuberotator.planner.NanoIpRoutePlanner planner = 
@@ -148,6 +152,17 @@ public class PlayerManager {
                 }
             } else {
                 logger.info("No IPV6_BLOCK provided. IPv6 rotation is disabled.");
+            }
+
+            String remoteCipherUrl = dotenv != null ? dotenv.get("YOUTUBE_REMOTE_CIPHER_URL") : null;
+            if (remoteCipherUrl == null || remoteCipherUrl.trim().isEmpty()) {
+                remoteCipherUrl = "https://cipher.kikkia.dev";
+            }
+            try {
+                youtube.setCipherManager(new dev.lavalink.youtube.cipher.RemoteCipherManager(remoteCipherUrl));
+                logger.info("Configured YouTube RemoteCipherManager with: {}", remoteCipherUrl);
+            } catch (Exception cipherEx) {
+                logger.warn("Could not configure YouTube RemoteCipherManager, using local: {}", cipherEx.getMessage());
             }
 
         } catch (Exception e) {
@@ -492,16 +507,25 @@ public class PlayerManager {
 
                     @Override
                     public void noMatches() {
-                        future.complete(new ArrayList<>());
+                        searchSoundCloud(query).thenAccept(future::complete).exceptionally(e -> {
+                            future.complete(new ArrayList<>());
+                            return null;
+                        });
                     }
 
                     @Override
                     public void loadFailed(FriendlyException exception) {
-                        future.complete(new ArrayList<>());
+                        searchSoundCloud(query).thenAccept(future::complete).exceptionally(e -> {
+                            future.complete(new ArrayList<>());
+                            return null;
+                        });
                     }
                 });
             } catch (Exception e) {
-                future.complete(new ArrayList<>());
+                searchSoundCloud(query).thenAccept(future::complete).exceptionally(ex -> {
+                    future.complete(new ArrayList<>());
+                    return null;
+                });
             }
         }, ioExecutor);
         return future;

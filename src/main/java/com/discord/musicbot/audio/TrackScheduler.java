@@ -1303,6 +1303,27 @@ public class TrackScheduler extends AudioEventAdapter {
     }
 
 
+    private volatile AudioTrack failedTrackForFallback = null;
+
+    @Override
+    public void onTrackException(AudioPlayer pl, AudioTrack track, com.sedmelluq.discord.lavaplayer.tools.FriendlyException exception) {
+        logger.warn("Track exception for '{}': {}", track.getInfo().title, exception.getMessage());
+        // Only attempt fallback if track has played less than 10 seconds (startup/stream loading failure)
+        // and if it hasn't already fallen back
+        long durationPlayed = trackStartTimeMs > 0 ? (System.currentTimeMillis() - trackStartTimeMs) : 0;
+        boolean isFallback = "soundcloud_fallback".equals(track.getUserData())
+                || (track.getUserData() instanceof String s && s.contains("soundcloud_fallback"));
+        if (durationPlayed < 10000 && !isFallback) {
+            failedTrackForFallback = track;
+        }
+    }
+
+    @Override
+    public void onTrackStuck(AudioPlayer player, AudioTrack track, long thresholdMs) {
+        logger.warn("Track '{}' stuck for {} ms. Advancing to next track.", track.getInfo().title, thresholdMs);
+        nextTrack();
+    }
+
     @Override
     public void onTrackEnd(AudioPlayer pl, AudioTrack track, AudioTrackEndReason endReason) {
         logger.info("Track End: " + track.getInfo().title + " Reason: " + endReason);
@@ -1322,6 +1343,69 @@ public class TrackScheduler extends AudioEventAdapter {
         }
         trackStartTimeMs = 0;
 
+        if (failedTrackForFallback == track) {
+            failedTrackForFallback = null;
+            logger.info("Attempting automatic SoundCloud playback fallback for failed track: {}", track.getInfo().title);
+            String cleanTitle = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(track.getInfo().title);
+            String cleanAuthor = com.discord.musicbot.audio.PlayerManager.cleanTrackTitle(track.getInfo().author);
+            String scQuery = cleanTitle.contains(" - ") ? "scsearch:" + cleanTitle : "scsearch:" + cleanAuthor + " " + cleanTitle;
+            final int gen = playbackGeneration.get();
+            final Object origUserData = track.getUserData();
+
+            com.discord.musicbot.audio.PlayerManager.getInstance().getPlayerManager().loadItemOrdered(musicManager, scQuery, new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
+                @Override
+                public void trackLoaded(AudioTrack fallbackTrack) {
+                    startFallbackTrack(fallbackTrack, origUserData, gen);
+                }
+
+                @Override
+                public void playlistLoaded(com.sedmelluq.discord.lavaplayer.track.AudioPlaylist playlist) {
+                    if (!playlist.getTracks().isEmpty()) {
+                        startFallbackTrack(playlist.getTracks().get(0), origUserData, gen);
+                    } else {
+                        noMatches();
+                    }
+                }
+
+                @Override
+                public void noMatches() {
+                    com.discord.musicbot.audio.PlayerManager.getInstance().getPlayerManager().loadItemOrdered(musicManager, "scsearch:" + cleanTitle, new com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler() {
+                        @Override
+                        public void trackLoaded(AudioTrack fallbackTrack) {
+                            startFallbackTrack(fallbackTrack, origUserData, gen);
+                        }
+
+                        @Override
+                        public void playlistLoaded(com.sedmelluq.discord.lavaplayer.track.AudioPlaylist playlist) {
+                            if (!playlist.getTracks().isEmpty()) {
+                                startFallbackTrack(playlist.getTracks().get(0), origUserData, gen);
+                            } else {
+                                noMatches();
+                            }
+                        }
+
+                        @Override
+                        public void noMatches() {
+                            logger.warn("No SoundCloud fallback found for: {}", track.getInfo().title);
+                            nextTrack();
+                        }
+
+                        @Override
+                        public void loadFailed(com.sedmelluq.discord.lavaplayer.tools.FriendlyException exception) {
+                            logger.warn("SoundCloud fallback failed for: {}", track.getInfo().title, exception);
+                            nextTrack();
+                        }
+                    });
+                }
+
+                @Override
+                public void loadFailed(com.sedmelluq.discord.lavaplayer.tools.FriendlyException exception) {
+                    noMatches();
+                }
+            });
+            return;
+        }
+
         if (endReason.mayStartNext) {
             if (crossfadeFired && pl != getActivePlayer()) {
                 crossfadeFired = false;
@@ -1334,6 +1418,19 @@ public class TrackScheduler extends AudioEventAdapter {
             removeExclusions();
             musicManager.cleanupLiveLyricsContainer();
         }
+    }
+
+    private void startFallbackTrack(AudioTrack fallbackTrack, Object origUserData, int gen) {
+        if (gen != playbackGeneration.get()) return;
+        if (origUserData instanceof String s) {
+            fallbackTrack.setUserData(s + "{\"soundcloud_fallback\":true}");
+        } else {
+            fallbackTrack.setUserData("soundcloud_fallback");
+        }
+        currentTrack = fallbackTrack;
+        getActivePlayer().startTrack(fallbackTrack, false);
+        musicManager.cancelIdleTimeout();
+        logger.info("Successfully recovered playback using SoundCloud fallback: {}", fallbackTrack.getInfo().title);
     }
 
 }
