@@ -73,7 +73,11 @@ public class GuildSettingsManager {
         try {
             File tempFile = new File(DB_FILE + ".tmp");
             mapper.writeValue(tempFile, cache);
-            Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            try {
+                Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (Exception ex) {
+                Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             logger.error("Failed to save guild settings", e);
         }

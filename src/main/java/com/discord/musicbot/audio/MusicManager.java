@@ -510,6 +510,7 @@ public class MusicManager {
         if (watchdogTask != null)
             watchdogTask.cancel(true);
         stopKaraokeTask();
+        scheduler.cleanup();
         player.destroy();
         secondaryPlayer.destroy();
     }
@@ -1212,6 +1213,7 @@ public class MusicManager {
         if (watchdogTask != null)
             watchdogTask.cancel(true);
         stopKaraokeTask();
+        scheduler.cleanup();
 
         try {
             deleteNowPlayingMessage(true); // Blocking delete

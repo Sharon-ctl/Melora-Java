@@ -983,6 +983,7 @@ public class TrackScheduler extends AudioEventAdapter {
         if (crossfadeTask != null) {
             crossfadeTask.cancel(true);
         }
+        removeExclusions();
     }
 
     public int clear(String filterUserId) {

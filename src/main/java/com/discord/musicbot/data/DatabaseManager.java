@@ -104,7 +104,11 @@ public class DatabaseManager {
             File actualFile = new File(DB_FILE);
             
             mapper.writeValue(tempFile, wrapper);
-            Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            try {
+                Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (Exception ex) {
+                Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             logger.error("Failed to save database", e);
         }

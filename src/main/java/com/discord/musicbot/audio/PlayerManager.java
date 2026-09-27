@@ -29,6 +29,7 @@ public class PlayerManager {
     private static PlayerManager INSTANCE;
     private static final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
             .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+            .connectTimeout(java.time.Duration.ofSeconds(6))
             .build();
     public static final com.fasterxml.jackson.databind.ObjectMapper JSON_MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
 
@@ -709,6 +710,7 @@ public class PlayerManager {
                 java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                         .uri(java.net.URI.create(url))
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                        .timeout(java.time.Duration.ofSeconds(5))
                         .GET()
                         .build();
                 java.net.http.HttpResponse<String> response = client.send(request,
@@ -823,6 +825,7 @@ public class PlayerManager {
                 java.net.http.HttpRequest nameReq = java.net.http.HttpRequest.newBuilder()
                         .uri(java.net.URI.create(url))
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                        .timeout(java.time.Duration.ofSeconds(6))
                         .GET()
                         .build();
                 java.net.http.HttpResponse<String> nameResp = client.send(nameReq,
@@ -1431,6 +1434,10 @@ public class PlayerManager {
 
             @Override
             public void playlistLoaded(AudioPlaylist playlist) {
+                if (playlist.getTracks().isEmpty()) {
+                    noMatches();
+                    return;
+                }
                 if (playlist.isSearchResult()) {
                     AudioTrack track = playlist.getTracks().get(0);
                     track.setUserData("{\"requester\":\"" + event.getUser().getId() + "\"}");

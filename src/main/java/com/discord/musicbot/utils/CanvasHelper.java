@@ -197,7 +197,19 @@ public class CanvasHelper {
         // Force PNG format and size 128
         if (avatarUrlStr != null) {
             avatarUrlStr = avatarUrlStr.replace(".webp", ".png") + "?size=128";
-            BufferedImage avatar = ImageIO.read(new URI(avatarUrlStr).toURL());
+            BufferedImage avatar = null;
+            try {
+                java.net.URLConnection conn = new URI(avatarUrlStr).toURL().openConnection();
+                conn.setConnectTimeout(3000);
+                conn.setReadTimeout(3000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                try (java.io.InputStream in = conn.getInputStream()) {
+                    avatar = ImageIO.read(in);
+                }
+            } catch (Exception e) {
+                // If avatar fetch fails, proceed without crashing
+                avatar = null;
+            }
             
             if (avatar != null) {
                 // Create rounded avatar

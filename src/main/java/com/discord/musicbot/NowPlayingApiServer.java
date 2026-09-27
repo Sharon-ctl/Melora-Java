@@ -115,7 +115,15 @@ public class NowPlayingApiServer {
                 sendJsonResponse(exchange, 200, responseJson);
             } catch (Exception e) {
                 logger.error("Error handling /nowplaying request", e);
-                sendResponse(exchange, 400, "Bad Request: " + e.getMessage());
+                try {
+                    sendResponse(exchange, 400, "Bad Request: " + e.getMessage());
+                } catch (Exception ignored) {
+                    try {
+                        exchange.close();
+                    } catch (Exception closeEx) {
+                        // ignore
+                    }
+                }
             }
         }
 

@@ -99,7 +99,11 @@ public class SessionManager {
             }
 
             mapper.writeValue(tempFile, copy);
-            Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            try {
+                Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (Exception ex) {
+                Files.move(tempFile.toPath(), actualFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
             logger.debug("Sessions saved to disk.");
         } catch (IOException e) {
             logger.error("Failed to save sessions", e);
