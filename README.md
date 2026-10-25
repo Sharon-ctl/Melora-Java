@@ -12,6 +12,26 @@ Privacy & Terms of the bot is listed in https://melora-info.vercel.app/
 
 Melora-Java is a high-performance, robust Discord music bot built with Java, JDA, and Lavaplayer. Designed for large-scale deployments, it features native Spotify integration, YouTube Autoplay fallback, a persistent 24/7 mode, and highly reliable state management.
 
+## Packages
+
+Maven pins runtime and test dependencies in [`pom.xml`](pom.xml). CI runs the Maven `verify` lifecycle, including the JUnit suite, before producing the shaded JAR.
+
+| Package | Version | Used for |
+| --- | --- | --- |
+| [JDA](https://central.sonatype.com/artifact/net.dv8tion/JDA) | 6.7.0 | Discord gateway, interactions, and voice connection |
+| [Lavaplayer](https://github.com/lavalink-devs/lavaplayer) | 2.2.7 | Audio loading, decoding, and track playback |
+| lavaplayer-ext-youtube-rotator | 2.2.7 | YouTube route rotation and fallback |
+| lavadsp | 0.7.8 | Native audio filters |
+| YouTube Source v2 | 1.18.2 | YouTube search and source integration |
+| JDAVE API and native adapters | 0.1.8 | Discord DAVE voice encryption for Windows and Linux |
+| [Jackson Databind](https://github.com/FasterXML/jackson-databind) | 2.22.4 | Configuration and persistent JSON data |
+| [Logback](https://logback.qos.ch/) | 1.5.37 | Application logging |
+| dotenv-java | 3.0.0 | Environment-based configuration |
+| [jsoup](https://jsoup.org/) | 1.23.2 | Lyrics-page parsing |
+| [JUnit Jupiter](https://junit.org/junit5/) | 6.1.3 | Unit tests |
+
+Build plugins are pinned in Maven too: compiler 3.15.0, Surefire 3.6.0, and Shade 3.6.2. Dependabot checks Maven and GitHub Actions dependencies weekly.
+
 ## Features
 
 - **High-Fidelity Audio Playback**: Powered by Lavaplayer, supporting YouTube, Soundcloud, and more.
@@ -131,7 +151,7 @@ Run the Java unit tests with `mvn test`; CI runs the full Maven `verify` lifecyc
 3. **Build the Project**
    Compile the bot using Maven. This will download all dependencies and build the shaded executable JAR file.
    ```bash
-   mvn clean package -DskipTests
+   mvn --batch-mode clean verify
    ```
    This generates a shaded JAR file in the `target/` directory (e.g., `melora.jar`).
 
