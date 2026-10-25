@@ -20,4 +20,4 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Package bot
-        run: mvn --batch-mode --no-transfer-progress -DskipTests package
+        run: mvn --batch-mode --no-transfer-progress verify

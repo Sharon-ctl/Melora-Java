@@ -1,4 +1,5 @@
 # Melora-Java 
+[![CI](https://github.com/Sharon-ctl/Melora-Java/actions/workflows/ci.yml/badge.svg)](https://github.com/Sharon-ctl/Melora-Java/actions/workflows/ci.yml)
 Dev:sharon, find me in discord https://discord.gg/KUAVNSJtu5
 
 
@@ -89,6 +90,8 @@ Melora-Java is a high-performance, robust Discord music bot built with Java, JDA
 - Spotify API Credentials (Client ID and Client Secret)
 
 ## Installation
+
+Run the Java unit tests with `mvn test`; CI runs the full Maven `verify` lifecycle before packaging.
 
 1. **Clone the Repository**
    ```bash
