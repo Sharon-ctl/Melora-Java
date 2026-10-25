@@ -1,5 +1,5 @@
 ## Requirements 
 
-Java JDK 26, 
+Java JDK 25 or newer,
 FFMPEG *in linux use sudo apt install ffmpeg*
 

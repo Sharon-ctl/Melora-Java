@@ -82,8 +82,8 @@ Melora-Java is a high-performance, robust Discord music bot built with Java, JDA
 
 ## Prerequisites
 
-- **Java Development Kit (JDK) 26. This is a must Have, no jdk versions lower will not work!!**
-  - Download from: https://jdk.java.net/26/
+- **Java Development Kit (JDK) 25 or newer**
+  - Download from: https://jdk.java.net/25/
 - **Apache Maven 3.9+**
 - A Discord Bot Token from the Discord Developer Portal
 - Spotify API Credentials (Client ID and Client Secret)
