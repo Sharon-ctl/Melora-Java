@@ -1,5 +1,10 @@
 # Melora-Java 
 [![CI](https://github.com/Sharon-ctl/Melora-Java/actions/workflows/ci.yml/badge.svg)](https://github.com/Sharon-ctl/Melora-Java/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-4%20passing-brightgreen?style=flat-square&logo=junit5&logoColor=white)](https://github.com/Sharon-ctl/Melora-Java/actions/workflows/ci.yml)
+[![Java](https://img.shields.io/badge/Java-25%2B-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![JDA](https://img.shields.io/badge/JDA-6.7.0-5865F2?style=flat-square&logo=discord&logoColor=white)](https://central.sonatype.com/artifact/net.dv8tion/JDA)
+[![Lavaplayer](https://img.shields.io/badge/Lavaplayer-2.2.7-0A7EA4?style=flat-square&logo=musicbrainz&logoColor=white)](https://github.com/lavalink-devs/lavaplayer)
+[![JUnit](https://img.shields.io/badge/JUnit-6.1.3-25A162?style=flat-square&logo=junit5&logoColor=white)](https://junit.org/junit5/)
 Dev:sharon, find me in discord https://discord.gg/KUAVNSJtu5
 
 
