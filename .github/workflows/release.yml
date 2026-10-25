@@ -26,7 +26,7 @@ jobs:
         run: mvn clean package -DskipTests -q
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: target/melora.jar
           generate_release_notes: true
