@@ -44,7 +44,7 @@ public class AutocompleteHandler {
             List<String> commands = List.of(
                     "play", "playinstant", "playnext", "playrandom", "pause", "resume", "skip", "previous", "stop", "disconnect", "autoplay",
                     "247", "crossfade", "join", "leave", "replay", "forward", "rewind", "removedupes", "grab", "search",
-                    "queue", "queue show", "queue search", "queue deduplicate", "queue compact", "queue reverse", "queue sort", "queue slice", "queue shufflefrom", "queue swap", "queue export", "queue import", 
+                    "queue", "queue show", "queue search", "queue deduplicate", "queue compact", "queue reverse", "queue sort", "queue slice", "queue shufflefrom", "queue swap", "queue export", "queue import", "queue forecast",
                     "nowplaying", "shuffle", "loop", "remove", "insert", "move", "clear", "jump",
                     "playlist", "playlist create", "playlist delete", "playlist rename", "playlist list",
                     "playlist info",

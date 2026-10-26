@@ -365,6 +365,8 @@ public class EmbedHelper {
                     "**%squeue export** - Export the current queue into a downloadable JSON file.\n\n", prefix));
             description.append(String.format(
                     "**%squeue import <file>** - Import a JSON queue file to append to the active queue.\n\n", prefix));
+            description.append(String.format(
+                    "**%squeue forecast <position>** - Estimate when an upcoming track will start.\n\n", prefix));
             description.append(
                     String.format("**%snowplaying** - View details about the currently playing track.\n\n", prefix));
             description

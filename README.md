@@ -75,6 +75,7 @@ Build plugins are pinned in Maven too: compiler 3.15.0, Surefire 3.6.0, and Shad
 - `/queue swap <pos1> <pos2>`: Exchange the positions of two specific tracks in the queue.
 - `/queue export`: Export the current queue into a downloadable JSON file.
 - `/queue import <file>`: Import an existing JSON queue file to append to the active queue.
+- `/queue forecast <position>`: Estimate when an upcoming track will start (excluding live or unknown-length tracks).
 - `/nowplaying`: Display detailed metadata and progress regarding the currently playing track.
 - `/shuffle`: Randomize the order of all upcoming tracks in the queue.
 - `/loop <mode>`: Configure the repeat behavior. Modes include `off`, `track` (repeat current song), or `queue` (repeat entire list).

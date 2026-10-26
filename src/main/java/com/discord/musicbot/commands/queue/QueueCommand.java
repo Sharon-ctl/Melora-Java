@@ -42,8 +42,41 @@ public class QueueCommand extends SlashCommand {
             case "swap": handleSwap(ctx); break;
             case "export": handleExport(ctx); break;
             case "import": handleImport(ctx); break;
+            case "forecast": handleForecast(ctx); break;
             default: ctx.replyError("Unknown subcommand.");
         }
+    }
+
+    private void handleForecast(CommandContext ctx) {
+        int position = (int) ctx.getOption("position").getAsLong();
+        List<AudioTrack> queue = ctx.getScheduler().getQueue();
+        if (position < 1 || position > queue.size()) {
+            ctx.replyError("Choose a queue position from 1 to " + queue.size() + ".");
+            return;
+        }
+
+        long waitMs = 0;
+        boolean omittedUnknownDuration = false;
+        AudioTrack current = ctx.getScheduler().getCurrentTrack();
+        if (current != null) {
+            if (current.getInfo().isStream || current.getDuration() <= 0) {
+                omittedUnknownDuration = true;
+            } else {
+                waitMs += Math.max(0, current.getDuration() - current.getPosition());
+            }
+        }
+        for (int i = 0; i < position - 1; i++) {
+            AudioTrack track = queue.get(i);
+            if (track.getInfo().isStream || track.getDuration() <= 0) {
+                omittedUnknownDuration = true;
+            } else {
+                waitMs += track.getDuration();
+            }
+        }
+
+        String suffix = omittedUnknownDuration ? " (excluding live or unknown-length tracks)" : "";
+        ctx.replyEphemeral("Track **#" + position + "** is estimated to start in about `"
+                + EmbedHelper.formatDuration(waitMs) + "`" + suffix + ".");
     }
 
     private void handleShow(CommandContext ctx) {
@@ -270,7 +303,9 @@ public class QueueCommand extends SlashCommand {
                                 .addOption(OptionType.INTEGER, "pos2", "Second track position", true),
                         new SubcommandData("export", "Export the current queue as a JSON file"),
                         new SubcommandData("import", "Import a queue from a JSON file")
-                                .addOption(OptionType.ATTACHMENT, "file", "JSON file to import", true)
+                                .addOption(OptionType.ATTACHMENT, "file", "JSON file to import", true),
+                        new SubcommandData("forecast", "Estimate when an upcoming track will start")
+                                .addOption(OptionType.INTEGER, "position", "Position in the upcoming queue", true)
                 );
     }
 }

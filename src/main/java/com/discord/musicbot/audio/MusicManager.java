@@ -806,6 +806,14 @@ public class MusicManager {
 
         aloneTask = PlayerManager.scheduledExecutor.schedule(() -> {
             try {
+                var connectedChannel = guild.getAudioManager().getConnectedChannel();
+                if (connectedChannel == null || connectedChannel.getMembers().stream()
+                        .anyMatch(member -> !member.getUser().isBot())) {
+                    logger.info("Alone timeout expired but listeners returned in guild: {}; keeping session alive.",
+                            guild.getName());
+                    return;
+                }
+
                 boolean isPlayingOrQueued = scheduler.getCurrentTrack() != null || !scheduler.getQueue().isEmpty();
 
                 if (mode247) {
