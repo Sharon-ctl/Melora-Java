@@ -1,4 +1,5 @@
 # Melora-Java 
+[![Version](https://img.shields.io/badge/version-v2.0.39-blue?style=flat-square)](https://github.com/Sharon-ctl/Melora-Java/tree/v2.0.39)
 [![CI](https://github.com/Sharon-ctl/Melora-Java/actions/workflows/ci.yml/badge.svg)](https://github.com/Sharon-ctl/Melora-Java/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-4%20passing-brightgreen?style=flat-square&logo=junit5&logoColor=white)](https://github.com/Sharon-ctl/Melora-Java/actions/workflows/ci.yml)
 [![Java](https://img.shields.io/badge/Java-25%2B-ED8B00?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/)
@@ -40,6 +41,7 @@ Build plugins are pinned in Maven too: compiler 3.15.0, Surefire 3.6.0, and Shad
 - **24/7 Persistent Mode**: Allows the bot to stay in the voice channel indefinitely and gracefully recover active queues after server restarts.
 - **Advanced Queue Management**: Full support for shuffling, looping, track moving, jumping, and history tracking.
 - **User Filters**: Target commands like clear or queue to specific users.
+- **Playback Diagnostics**: `/diagnose` checks gateway, audio, voice, playback, and queue state, then returns a stable issue code and suggested next step.
 - **Playlist & Favorites System**: Save and load queues or individual tracks.
 
 ## Commands
@@ -99,6 +101,7 @@ Build plugins are pinned in Maven too: compiler 3.15.0, Surefire 3.6.0, and Shad
 - `/lyrics [query]`: Retrieve the lyrics for the currently playing track, or search for lyrics of a specific song.
 - `/grab`: Send the currently playing track's details and URL directly to your private messages.
 - `/stats` / `/history` / `/wrapped`: View personalized statistics, listening history, and an aggregated summary of your music habits.
+- `/diagnose`: Check gateway, audio, voice, playback, and queue state; receive a stable issue code and suggested next step.
 - `/ping`: Check the response latency between the bot and Discord servers.
 - `/vote <skip/clear/disconnect>`: Initiate a democratic vote among listeners to perform playback actions.
 

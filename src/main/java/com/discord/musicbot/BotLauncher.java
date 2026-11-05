@@ -68,6 +68,7 @@ public class BotLauncher {
                         registry.register(new com.discord.musicbot.commands.admin.Mode247Command());
                         registry.register(new com.discord.musicbot.commands.admin.HelpCommand());
                         registry.register(new com.discord.musicbot.commands.admin.PingCommand());
+                        registry.register(new com.discord.musicbot.commands.admin.DiagnoseCommand());
                         registry.register(new com.discord.musicbot.commands.admin.SettingsCommand());
                         
                         registry.register(new com.discord.musicbot.commands.admin.DJCommand());
